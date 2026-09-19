@@ -1,0 +1,111 @@
+name: Schlappseil
+description: Probe-Setup für Schlappseil (Digitalmixer 18-Kanal Multitrack)
+
+channels:
+  "01 KICK.flac":
+    name: Kick
+    group: drums
+    type: mono
+    pan: 0.0
+
+  "02 SNARE.flac":
+    name: Snare Top
+    group: drums
+    type: mono
+    pan: 0.0
+
+  "03 SNARE U.flac":
+    name: Snare Bottom
+    group: drums
+    type: mono
+    pan: 0.0
+
+  "04 HIHAT.flac":
+    name: HiHat
+    group: drums
+    type: mono
+    pan: 0.25
+
+  "05 HT1.flac":
+    name: High Tom
+    group: drums
+    type: mono
+    pan: -0.3
+
+  "06 STANDTOM.flac":
+    name: Floor Tom
+    group: drums
+    type: mono
+    pan: 0.35
+
+  "07 OVH L.flac":
+    name: Overhead Left
+    group: drums
+    type: mono
+    pan: -0.75
+
+  "08 OVH R.flac":
+    name: Overhead Right
+    group: drums
+    type: mono
+    pan: 0.75
+
+  "09 BASS.flac":
+    name: Bass
+    group: bass
+    type: mono
+    pan: 0.0
+
+  "10 E-GITARRE.flac":
+    name: E-Gitarre
+    group: guitars
+    type: mono
+    pan: -0.45
+
+  "11 VOC MATSCHER.flac":
+    name: Vocals Matscher
+    group: vocals lead
+    type: mono
+    pan: -0.2
+
+  "12 VOC MATTEL.flac":
+    name: Vocals Mattel
+    group: vocals background
+    type: mono
+    pan: 0.2
+
+  "13 VOC ZILLE.flac":
+    name: Vocals Zille
+    group: vocals background
+    type: mono
+    pan: -0.35
+
+  "14 VOC TORSTEN.flac":
+    name: Vocals Torsten
+    group: vocals background
+    type: mono
+    pan: 0.35
+
+  "15 VOC PETER.flac":
+    name: Vocals Peter (Lead)
+    group: vocals background
+    type: mono
+    pan: 0.0
+
+  "16 A-GITARRE.flac":
+    name: A-Gitarre
+    group: guitars
+    type: mono
+    pan: 0.45
+
+  "19 TORSTENKEY-L.flac":
+    name: Keyboard Left
+    group: keys
+    type: mono
+    pan: -0.6
+
+  "20 TORSTENKEY-R.flac":
+    name: Keyboard Right
+    group: keys
+    type: mono
+    pan: 0.6

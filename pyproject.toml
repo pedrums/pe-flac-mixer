@@ -1,0 +1,40 @@
+[project]
+name = "ai-mixer"
+version = "0.1.0"
+description = "Automatischer Grobmix für Bandproben und Live-Mitschnitte"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "soundfile>=0.12.1",
+    "pyloudnorm>=0.1.1",
+    "pyyaml>=6.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+ai-mixer = "ai_mixer.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+ignore = [
+    "B008",    # Typer verwendet Argument(...) und Option(...) als Parameter-Defaults
+    "BLE001",  # Sicheres Abfangen von Formatierungs-/Loudnorm-Ausnahmen
+    "S110",    # Optionaler Fallback beim Konvertieren
+]
+

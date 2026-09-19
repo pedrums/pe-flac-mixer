@@ -1,0 +1,39 @@
+name: Gig
+description: Digitalmixer-Setup mit durchnummerierten Kanälen
+
+channels:
+  CH01.flac:
+    name: Kick
+    group: drums
+    type: mono
+    pan: 0.0
+
+  CH02.flac:
+    name: Snare
+    group: drums
+    type: mono
+    pan: 0.0
+
+  CH03.flac:
+    name: HiHat
+    group: drums
+    type: mono
+    pan: 0.25
+
+  CH04.flac:
+    name: Bass
+    group: bass
+    type: mono
+    pan: 0.0
+
+  CH05.flac:
+    name: Guitar
+    group: guitars
+    type: mono
+    pan: -0.4
+
+  CH06.flac:
+    name: Lead Vocal
+    group: vocals
+    type: mono
+    pan: 0.0

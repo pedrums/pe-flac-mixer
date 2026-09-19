@@ -1,0 +1,62 @@
+name: Probe
+description: Standard-Setup für Bandproben
+
+channels:
+  KICK.flac:
+    name: Kick
+    group: drums
+    type: mono
+    pan: 0.0
+
+  SNARE.flac:
+    name: Snare
+    group: drums
+    type: mono
+    pan: 0.0
+
+  HH.flac:
+    name: HiHat
+    group: drums
+    type: mono
+    pan: 0.25
+
+  OH_L.flac:
+    name: Overheads Left
+    group: drums
+    type: mono
+    pan: -0.7
+
+  OH_R.flac:
+    name: Overheads Right
+    group: drums
+    type: mono
+    pan: 0.7
+
+  BASS.flac:
+    name: Bass
+    group: bass
+    type: mono
+    pan: 0.0
+
+  GIT.flac:
+    name: Guitar
+    group: guitars
+    type: mono
+    pan: -0.4
+
+  GIT2.flac:
+    name: Guitar 2
+    group: guitars
+    type: mono
+    pan: 0.4
+
+  KEYS.flac:
+    name: Keyboards
+    group: keys
+    type: stereo
+
+  VOC.flac:
+    name: Lead Vocal
+    group: vocals
+    type: mono
+    pan: 0.0
