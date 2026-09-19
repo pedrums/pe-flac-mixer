@@ -8,12 +8,12 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from ai_mixer.analysis.analyzer import analyze_tracks
-from ai_mixer.config import load_setup, validate_and_match_tracks
-from ai_mixer.mix.planner import generate_mix_plan
-from ai_mixer.mix.renderer import render_mix
+from pe_mixer.analysis.analyzer import analyze_tracks
+from pe_mixer.config import load_setup, validate_and_match_tracks
+from pe_mixer.mix.planner import generate_mix_plan
+from pe_mixer.mix.renderer import render_mix
 
-app = typer.Typer(help="AI Audio-Mixer: Automatischer Proben-Grobmix aus FLAC-Multitrack-Spuren.")
+app = typer.Typer(help="PE Audio-Mixer: Automatischer Proben-Grobmix aus FLAC-Multitrack-Spuren.")
 console = Console()
 
 
@@ -38,7 +38,7 @@ def analyze(
     console.print(
         Panel(
             f"[bold cyan]Audio-Analyse für:[/bold cyan] {input_dir}\n[bold cyan]Setup:[/bold cyan] {setup}",
-            title="AI Audio-Mixer",
+            title="PE Audio-Mixer",
         )
     )
 
@@ -137,7 +137,7 @@ def mix(
             f"[bold]Eingabe:[/bold] {input_dir}\n"
             f"[bold]Setup:[/bold]   {setup}\n"
             f"[bold]Ausgabe:[/bold] {output_dir} ({base_name}.*)\n",
-            title="AI Audio-Mixer",
+            title="PE Audio-Mixer",
         )
     )
 

@@ -1,5 +1,5 @@
 [project]
-name = "ai-mixer"
+name = "pe-mixer"
 version = "0.1.0"
 description = "Automatischer Grobmix für Bandproben und Live-Mitschnitte"
 readme = "README.md"
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-ai-mixer = "ai_mixer.cli:app"
+pe-mixer = "pe_mixer.cli:app"
 
 [build-system]
 requires = ["hatchling"]

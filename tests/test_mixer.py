@@ -1,20 +1,20 @@
-"""Tests für den AI Audio-Mixer."""
+"""Tests für den PE Audio-Mixer."""
 
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 
-from ai_mixer.analysis.analyzer import analyze_tracks
-from ai_mixer.config import load_setup, validate_and_match_tracks
-from ai_mixer.mix.dsp import (
+from pe_mixer.analysis.analyzer import analyze_tracks
+from pe_mixer.config import load_setup, validate_and_match_tracks
+from pe_mixer.mix.dsp import (
     apply_highpass,
     create_highpass_sos,
     pan_mono_to_stereo,
     peak_limiter,
 )
-from ai_mixer.mix.planner import generate_mix_plan
-from ai_mixer.mix.renderer import render_mix
+from pe_mixer.mix.planner import generate_mix_plan
+from pe_mixer.mix.renderer import render_mix
 
 
 def test_load_setups():

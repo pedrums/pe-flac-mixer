@@ -7,10 +7,10 @@ dev:
 	uv sync --dev
 
 mix:
-	uv run ai-mixer mix "$(INPUT)" --setup "$(SETUP)"
+	uv run pe-mixer mix "$(INPUT)" --setup "$(SETUP)"
 
 analyze:
-	uv run ai-mixer analyze "$(INPUT)" --setup "$(SETUP)"
+	uv run pe-mixer analyze "$(INPUT)" --setup "$(SETUP)"
 
 test:
 	uv run pytest

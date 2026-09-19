@@ -161,7 +161,7 @@ make mix INPUT=/pfad/zur/probe SETUP=probe
 oder direkt per CLI:
 
 ```bash
-uv run ai-mixer mix ./aufnahme --setup probe
+uv run pe-mixer mix ./aufnahme --setup probe
 ```
 
 Ergebnis in `./output`:
@@ -174,7 +174,7 @@ Ergebnis in `./output`:
 # 7. Projektstruktur
 
 ```text
-ai-mixer/
+pe-mixer/
 ├── pyproject.toml
 ├── Makefile
 ├── README.md
@@ -184,7 +184,7 @@ ai-mixer/
 │   └── gig.yml
 │
 ├── src/
-│   └── ai_mixer/
+│   └── pe_mixer/
 │       ├── __init__.py
 │       ├── cli.py             # CLI mit Typer
 │       ├── config.py          # Setup-Lader & Validierung
