@@ -1,29 +1,29 @@
-"""Tests für den PE Audio-Mixer."""
+"""Tests for pe-flac-mixer."""
 
 from pathlib import Path
 
 import numpy as np
 import soundfile as sf
 
-from pe_mixer.analysis.analyzer import analyze_tracks
-from pe_mixer.config import load_setup, validate_and_match_tracks
-from pe_mixer.mix.dsp import (
+from pe_flac_mixer.analysis.analyzer import analyze_tracks
+from pe_flac_mixer.config import load_setup, validate_and_match_tracks
+from pe_flac_mixer.generator import generate_setup_from_directory, save_setup_file
+from pe_flac_mixer.mix.dsp import (
     apply_highpass,
     create_highpass_sos,
     pan_mono_to_stereo,
     peak_limiter,
 )
-from pe_mixer.mix.planner import generate_mix_plan
-from pe_mixer.mix.renderer import render_mix
+from pe_flac_mixer.mix.planner import generate_mix_plan
+from pe_flac_mixer.mix.renderer import render_mix
 
 
 def test_load_setups():
-    """Testet das Laden der Standard-Setups."""
+    """Test loading standard setups."""
     setup_probe = load_setup("probe")
-    assert setup_probe.name == "Probe"
-    assert "KICK.flac" in setup_probe.channels
-    assert setup_probe.channels["KICK.flac"].type == "mono"
-    assert setup_probe.channels["KEYS.flac"].type == "stereo"
+    assert setup_probe.name == "Schlappseil"
+    assert "01 KICK.flac" in setup_probe.channels
+    assert setup_probe.channels["01 KICK.flac"].type == "mono"
 
     setup_gig = load_setup("gig")
     assert setup_gig.name == "Gig"
@@ -31,28 +31,27 @@ def test_load_setups():
 
 
 def test_validate_and_match_tracks(tmp_path: Path):
-    """Testet die Erkennung von vorhandenen, fehlenden und unbekannten Spuren."""
+    """Test detection of present, missing, and unknown tracks."""
     setup = load_setup("probe")
 
-    # Dateien anlegen: KICK und SNARE vorhanden, AUX01 unbekannt, VOCAL fehlt
-    (tmp_path / "KICK.flac").touch()
-    (tmp_path / "snare.flac").touch()  # Testet auch Case-Insensitivity
+    # Create dummy files: Kick and Snare present, AUX01 unknown, Bass missing
+    (tmp_path / "01 KICK.flac").touch()
+    (tmp_path / "02 snare.flac").touch()  # Tests case insensitivity
     (tmp_path / "AUX01.flac").touch()
 
     matched, missing, unknown = validate_and_match_tracks(tmp_path, setup)
 
-    assert "KICK.flac" in matched
-    assert "SNARE.flac" in matched
-    assert "VOC.flac" in missing
+    assert "01 KICK.flac" in matched
+    assert "02 SNARE.flac" in matched
+    assert "09 BASS.flac" in missing
     assert "AUX01.flac" in unknown
 
 
 def test_dsp_panning():
-    """Testet das Constant-Power Panning von Mono zu Stereo."""
-    # 1 Sekunde Signal
+    """Test constant-power panning from mono to stereo."""
     mono = np.ones(44100, dtype=np.float32)
 
-    # Center Pan (0.0) -> Beide Kanäle ca. 0.7071
+    # Center Pan (0.0) -> Both channels ~0.7071
     stereo_center = pan_mono_to_stereo(mono, 0.0)
     assert stereo_center.shape == (44100, 2)
     assert np.allclose(stereo_center[:, 0], np.sqrt(0.5), atol=1e-3)
@@ -70,98 +69,139 @@ def test_dsp_panning():
 
 
 def test_dsp_highpass():
-    """Testet die Butterworth-Highpass-Filterung."""
+    """Test Butterworth high-pass filtering."""
     sr = 44100
     t = np.linspace(0, 1.0, sr, endpoint=False)
 
-    # Signal: 20 Hz Subbass + 1000 Hz Ton
+    # Signal: 20 Hz sub-bass + 1000 Hz tone
     sig_sub = 0.5 * np.sin(2 * np.pi * 20 * t).astype(np.float32)
     sig_tone = 0.5 * np.sin(2 * np.pi * 1000 * t).astype(np.float32)
     combined = sig_sub + sig_tone
 
-    # Highpass bei 100 Hz anwenden
     sos = create_highpass_sos(100.0, sr)
     filtered, _ = apply_highpass(combined, sos)
 
-    # Der 20 Hz Anteil sollte stark gedämpft sein
+    # 20 Hz component should be attenuated significantly
     assert np.max(np.abs(filtered)) < np.max(np.abs(combined))
 
 
 def test_dsp_limiter():
-    """Testet den Peak-Limiter gegen Übersteuerung."""
+    """Test peak limiter prevents clipping."""
     sr = 44100
-    # Künstliches Signal mit Peaks bis +6 dBFS (Faktor 2.0)
     overshoot = (np.sin(np.linspace(0, 100, sr)) * 2.0).astype(np.float32)
     stereo_audio = np.column_stack([overshoot, overshoot])
 
     limited = peak_limiter(stereo_audio, ceiling_db=-1.0, sr=sr)
     max_peak = np.max(np.abs(limited))
-    ceiling_linear = 10 ** (-1.0 / 20.0)  # ca. 0.891
+    ceiling_linear = 10 ** (-1.0 / 20.0)
 
     assert max_peak <= ceiling_linear + 1e-4
 
 
 def test_full_pipeline_end_to_end(tmp_path: Path):
-    """End-to-End-Test: Erzeugt synthetische Tracks, analysiert, plant und rendert."""
+    """End-to-end test: Synthesize tracks, analyze, plan, and render."""
     sr = 44100
-    dur = 2.0  # 2 Sekunden
+    dur = 2.0
     t = np.linspace(0, dur, int(sr * dur), endpoint=False)
 
     tracks_dir = tmp_path / "aufnahme"
     tracks_dir.mkdir()
     output_dir = tmp_path / "output"
 
-    # 1. Synthetische Multitrack-Dateien erstellen
-    # Kick (60 Hz)
+    # 1. Synthesize multitrack audio files
     kick = (0.6 * np.sin(2 * np.pi * 60 * t)).astype(np.float32)
-    sf.write(str(tracks_dir / "KICK.flac"), kick, sr)
+    sf.write(str(tracks_dir / "01 KICK.flac"), kick, sr)
 
-    # Snare (200 Hz + Noise)
     snare = (0.4 * np.sin(2 * np.pi * 200 * t) + 0.1 * np.random.randn(len(t))).astype(np.float32)
-    sf.write(str(tracks_dir / "SNARE.flac"), snare, sr)
+    sf.write(str(tracks_dir / "02 SNARE.flac"), snare, sr)
 
-    # Bass (110 Hz)
     bass = (0.5 * np.sin(2 * np.pi * 110 * t)).astype(np.float32)
-    sf.write(str(tracks_dir / "BASS.flac"), bass, sr)
+    sf.write(str(tracks_dir / "09 BASS.flac"), bass, sr)
 
-    # Vocals (440 Hz Sinus)
     voc = (0.3 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
-    sf.write(str(tracks_dir / "VOC.flac"), voc, sr)
+    sf.write(str(tracks_dir / "11 VOC MATSCHER.flac"), voc, sr)
 
-    # 2. Setup laden und matchen
+    # 2. Load setup and match
     setup = load_setup("probe")
     matched, _, _ = validate_and_match_tracks(tracks_dir, setup)
 
-    assert "KICK.flac" in matched
-    assert "VOC.flac" in matched
+    assert "01 KICK.flac" in matched
+    assert "11 VOC MATSCHER.flac" in matched
 
-    # 3. Analyse ausführen
+    # 3. Perform analysis
     analyses = analyze_tracks(matched, setup)
     assert len(analyses) == 4
     for a in analyses.values():
         assert not a.is_silent
         assert a.duration_sec == dur
 
-    # 4. Mixplan erzeugen
+    # 4. Generate mix plan
     plan = generate_mix_plan(analyses, setup)
-    assert "VOC.flac" in plan.tracks
-    # Gesang sollte Highpass um 100 Hz haben
-    assert plan.tracks["VOC.flac"].highpass_hz == 100.0
+    assert "11 VOC MATSCHER.flac" in plan.tracks
+    # Vocals should have highpass around 90 Hz for lead vocals
+    assert plan.tracks["11 VOC MATSCHER.flac"].highpass_hz == 90.0
 
-    # 5. Rendering durchführen
+    # 5. Render mix
     output_files = render_mix(matched, plan, output_dir)
 
     assert "flac" in output_files
     assert output_files["flac"].exists()
     assert (output_dir / "mix.json").exists()
 
-    # Ausgabedatei validieren
+    # Validate output file
     rendered_audio, out_sr = sf.read(str(output_files["flac"]))
     assert out_sr == sr
     assert rendered_audio.ndim == 2  # Stereo
     assert rendered_audio.shape[1] == 2
     assert not np.isnan(rendered_audio).any()
 
-    # Peak darf Ceiling (-1.0 dBFS) nicht überschreiten
+    # Peak must not exceed ceiling (-1.0 dBFS)
     max_peak = np.max(np.abs(rendered_audio))
     assert max_peak <= 10 ** (-1.0 / 20.0) + 1e-3
+
+
+def test_create_setup_generator(tmp_path: Path):
+    """Test guessing and generating setup YAML from a folder with FLACs."""
+    sr = 44100
+    silence_mono = np.zeros(1000, dtype=np.float32)
+    silence_stereo = np.zeros((1000, 2), dtype=np.float32)
+
+    audio_dir = tmp_path / "stems"
+    audio_dir.mkdir()
+
+    # Create dummy FLAC files
+    sf.write(str(audio_dir / "01 KICK.flac"), silence_mono, sr)
+    sf.write(str(audio_dir / "02 Snare Top.flac"), silence_mono, sr)
+    sf.write(str(audio_dir / "03 Snare U.flac"), silence_mono, sr)
+    sf.write(str(audio_dir / "04 HIHAT.flac"), silence_mono, sr)
+    sf.write(str(audio_dir / "07 OVH L.flac"), silence_mono, sr)
+    sf.write(str(audio_dir / "08 OVH R.flac"), silence_mono, sr)
+    sf.write(str(audio_dir / "09 BASS.flac"), silence_mono, sr)
+    sf.write(str(audio_dir / "10 Git_Lead.flac"), silence_mono, sr)
+    sf.write(str(audio_dir / "11 Voc_Main.flac"), silence_mono, sr)
+    sf.write(str(audio_dir / "12 Voc_Back.flac"), silence_mono, sr)
+    sf.write(str(audio_dir / "19 Keys_Stereo.flac"), silence_stereo, sr)
+
+    setup_cfg = generate_setup_from_directory(audio_dir, setup_name="test_band")
+    assert setup_cfg.name == "test_band"
+    assert setup_cfg.channels["01 KICK.flac"].group == "drums"
+    assert setup_cfg.channels["01 KICK.flac"].name == "Kick"
+    assert setup_cfg.channels["02 Snare Top.flac"].name == "Snare Top"
+    assert setup_cfg.channels["03 Snare U.flac"].name == "Snare Bottom"
+    assert setup_cfg.channels["04 HIHAT.flac"].group == "drums"
+    assert setup_cfg.channels["07 OVH L.flac"].pan == -0.75
+    assert setup_cfg.channels["08 OVH R.flac"].pan == 0.75
+    assert setup_cfg.channels["09 BASS.flac"].group == "bass"
+    assert setup_cfg.channels["11 Voc_Main.flac"].group == "vocals lead"
+    assert setup_cfg.channels["11 Voc_Main.flac"].pan == 0.0
+    assert setup_cfg.channels["12 Voc_Back.flac"].group == "vocals background"
+    assert setup_cfg.channels["19 Keys_Stereo.flac"].type == "stereo"
+
+    yaml_file = tmp_path / "test_band.yml"
+    saved = save_setup_file(setup_cfg, yaml_file)
+    assert saved.exists()
+
+    # Ensure saved file can be loaded by load_setup
+    reloaded = load_setup(str(yaml_file))
+    assert reloaded.name == "test_band"
+    assert len(reloaded.channels) == 11

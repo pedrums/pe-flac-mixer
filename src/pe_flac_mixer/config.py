@@ -1,5 +1,6 @@
-"""Konfigurations- und Setup-Verwaltung für den Audio-Mixer."""
+"""Configuration and setup management for pe-flac-mixer."""
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -7,13 +8,39 @@ from typing import Literal
 import yaml
 
 
+def normalize_path(path_input: str | Path | None) -> Path | None:
+    """
+    Normalizes a path string or Path object.
+    Supports Windows-style paths on Linux/WSL:
+    Converts 'E:\\path\\to\\dir' or 'E:/path' to '/mnt/e/path/to/dir'.
+    """
+    if path_input is None:
+        return None
+    p_str = str(path_input).strip().strip("'\"")
+    if not p_str:
+        return None
+
+    # Handle unescaped backslashes in shell/make arguments (e.g. E:\data2\...)
+    # Replace backslashes with forward slashes first
+    p_str = p_str.replace("\\", "/")
+
+    # Check for Windows drive letter e.g. E:/ or E:path
+    m = re.match(r"^([a-zA-Z]):[ /]?(.*)$", p_str)
+    if m:
+        drive = m.group(1).lower()
+        rest = m.group(2).lstrip("/")
+        p_str = f"/mnt/{drive}/{rest}" if rest else f"/mnt/{drive}"
+
+    return Path(p_str).expanduser()
+
+
 @dataclass
 class ChannelConfig:
     name: str
     group: str
     type: Literal["mono", "stereo"] = "mono"
-    pan: float = 0.0  # -1.0 (ganz links) bis 1.0 (ganz rechts), 0.0 = Center
-    width: float = 1.0  # Stereobreite für Stereospuren (1.0 = normal)
+    pan: float = 0.0  # -1.0 (hard left) to 1.0 (hard right), 0.0 = Center
+    width: float = 1.0  # Stereo width for stereo tracks (1.0 = normal)
 
 
 @dataclass
@@ -24,12 +51,13 @@ class SetupConfig:
 
 
 def load_setup(setup_name_or_path: str, setups_dir: Path | None = None) -> SetupConfig:
-    """Lädt ein Mixer-Setup aus einer YAML-Datei oder anhand des Namens."""
-    path = Path(setup_name_or_path)
+    """Loads a mixer setup from a YAML file or by setup name."""
+    norm = normalize_path(setup_name_or_path)
+    path = norm if norm else Path(setup_name_or_path)
 
-    # 1. Direkter Pfad zur Datei
+    # 1. Direct path to file
     if not path.is_file():
-        # 2. Suche in setups/
+        # 2. Search in setups/
         base_dir = setups_dir or (Path.cwd() / "setups")
         candidate1 = base_dir / f"{setup_name_or_path}.yml"
         candidate2 = base_dir / f"{setup_name_or_path}.yaml"
@@ -40,7 +68,7 @@ def load_setup(setup_name_or_path: str, setups_dir: Path | None = None) -> Setup
             path = candidate2
         else:
             raise FileNotFoundError(
-                f"Setup '{setup_name_or_path}' nicht gefunden (weder als Datei noch in {base_dir})."
+                f"Setup '{setup_name_or_path}' not found (neither as direct file nor in {base_dir})."
             )
 
     with open(path, "r", encoding="utf-8") as f:

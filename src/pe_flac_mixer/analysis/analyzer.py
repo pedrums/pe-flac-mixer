@@ -8,7 +8,7 @@ import numpy as np
 import pyloudnorm as pyln
 import soundfile as sf
 
-from pe_mixer.config import SetupConfig
+from pe_flac_mixer.config import SetupConfig
 
 
 @dataclass

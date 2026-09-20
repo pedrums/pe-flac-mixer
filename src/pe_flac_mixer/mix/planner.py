@@ -2,8 +2,8 @@
 
 from dataclasses import asdict, dataclass
 
-from pe_mixer.analysis.analyzer import TrackAnalysis
-from pe_mixer.config import SetupConfig
+from pe_flac_mixer.analysis.analyzer import TrackAnalysis
+from pe_flac_mixer.config import SetupConfig
 
 
 @dataclass

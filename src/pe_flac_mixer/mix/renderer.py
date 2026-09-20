@@ -9,7 +9,7 @@ import numpy as np
 import pyloudnorm as pyln
 import soundfile as sf
 
-from pe_mixer.mix.dsp import (
+from pe_flac_mixer.mix.dsp import (
     apply_gain,
     apply_highpass,
     create_highpass_sos,
@@ -17,7 +17,7 @@ from pe_mixer.mix.dsp import (
     pan_stereo,
     peak_limiter,
 )
-from pe_mixer.mix.planner import MixPlan
+from pe_flac_mixer.mix.planner import MixPlan
 
 
 def render_mix(

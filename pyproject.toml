@@ -1,7 +1,7 @@
 [project]
-name = "pe-mixer"
+name = "pe-flac-mixer"
 version = "0.1.0"
-description = "Automatischer Grobmix für Bandproben und Live-Mitschnitte"
+description = "Automatic rough mix for band rehearsals and live recordings from FLAC multitracks"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -15,7 +15,8 @@ dependencies = [
 ]
 
 [project.scripts]
-pe-mixer = "pe_mixer.cli:app"
+pe-flac-mixer = "pe_flac_mixer.cli:app"
+pe-mixer = "pe_flac_mixer.cli:app"
 
 [build-system]
 requires = ["hatchling"]

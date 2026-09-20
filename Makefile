@@ -1,30 +1,40 @@
-.PHONY: install dev mix analyze test lint format check clean
+SETUP ?= probe
 
-install:
+.DEFAULT_GOAL := help
+
+.PHONY: help install dev mix analyze create-setup test lint format check clean
+
+help: # Show available targets and descriptions
+	@awk 'BEGIN {FS = ":.*?# "} /^[a-zA-Z_-]+:.*?# / {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+install: # Install dependencies using uv
 	uv sync
 
-dev:
+dev: # Install development dependencies
 	uv sync --dev
 
-mix:
-	uv run pe-mixer mix "$(INPUT)" --setup "$(SETUP)"
+mix: # Render rough mix (args: INPUT=<path> [SETUP=<name>])
+	uv run pe-flac-mixer mix "$(INPUT)" --setup "$(SETUP)"
 
-analyze:
-	uv run pe-mixer analyze "$(INPUT)" --setup "$(SETUP)"
+analyze: # Analyze audio tracks (args: INPUT=<path> [SETUP=<name>])
+	uv run pe-flac-mixer analyze "$(INPUT)" --setup "$(SETUP)"
 
-test:
-	uv run pytest
+create-setup: # Generate setup YAML by guessing tracks from directory (args: SOURCE=<path> [NAME=<name>])
+	uv run pe-flac-mixer create-setup --source "$(SOURCE)" $(if $(NAME),--name "$(NAME)",)
 
-lint:
+test: # Run tests via pytest
+	uv run python -m pytest
+
+lint: # Run ruff linter
 	uv run ruff check .
 
-format:
+format: # Format code with ruff
 	uv run ruff format .
 
-check:
+check: # Check linting and formatting
 	uv run ruff check .
 	uv run ruff format --check .
 
-clean:
+clean: # Remove cache, build artifacts, and __pycache__
 	rm -rf .pytest_cache .ruff_cache build dist *.egg-info
 	find . -type d -name "__pycache__" -exec rm -rf {} +
