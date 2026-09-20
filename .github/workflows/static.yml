@@ -41,6 +41,7 @@ jobs:
         
       - name: Install dependencies & MkDocs
         run: |
+          uv pip install --system -e .
           uv pip install --system mkdocs mkdocs-material mkdocstrings mkdocstrings-python
           
       - name: Build documentation with MkDocs
