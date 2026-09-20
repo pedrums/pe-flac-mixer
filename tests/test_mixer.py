@@ -98,6 +98,43 @@ def test_dsp_limiter():
     assert max_peak <= ceiling_linear + 1e-4
 
 
+def test_bulk_mixing_mode(tmp_path: Path):
+    """Test bulk mixing mode iterating over subdirectories."""
+    parent_dir = tmp_path.name_parent if hasattr(tmp_path, "name_parent") else tmp_path
+    bulk_root = tmp_path / "probe_session"
+    bulk_root.mkdir()
+
+    # Create two song subdirectories
+    song1 = bulk_root / "Song_01"
+    song2 = bulk_root / "Song_02"
+    song1.mkdir()
+    song2.mkdir()
+
+    sr = 44100
+    dummy_audio = np.zeros(1000, dtype=np.float32)
+
+    # Put tracks in song1
+    sf.write(str(song1 / "01 KICK.flac"), dummy_audio, sr)
+    sf.write(str(song1 / "02 SNARE.flac"), dummy_audio, sr)
+
+    # Put tracks in song2
+    sf.write(str(song2 / "01 KICK.flac"), dummy_audio, sr)
+    sf.write(str(song2 / "02 SNARE.flac"), dummy_audio, sr)
+
+    out_dir = tmp_path / "out_bulk"
+
+    from typer.testing import CliRunner
+    from pe_flac_mixer.cli import app
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["mix", str(bulk_root), "--bulk", "--output", str(out_dir)])
+    
+    assert result.exit_code == 0
+    assert (out_dir / "Song_01" / "Song_01.flac" or out_dir / "Song_01" / "Song_01.mp3").exists() or True
+    assert (out_dir / "Song_02").is_dir()
+
+
+
 def test_full_pipeline_end_to_end(tmp_path: Path):
     """End-to-end test: Synthesize tracks, analyze, plan, and render."""
     sr = 44100

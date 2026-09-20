@@ -22,5 +22,6 @@ plugins:
 
 nav:
   - Home: index.md
-  - Workflow: TODO/workflow.md
   - API Reference: api.md
+  - ToDo:
+    - Workflow: TODO/workflow.md

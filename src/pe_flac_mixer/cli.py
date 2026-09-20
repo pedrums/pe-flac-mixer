@@ -1,8 +1,10 @@
 """CLI interface for pe-flac-mixer."""
 
 import json
+import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -13,6 +15,9 @@ from pe_flac_mixer.config import load_setup, normalize_path, validate_and_match_
 from pe_flac_mixer.generator import generate_setup_from_directory, save_setup_file
 from pe_flac_mixer.mix.planner import generate_mix_plan
 from pe_flac_mixer.mix.renderer import render_mix
+
+# Load environment variables from .env if present
+load_dotenv()
 
 app = typer.Typer(help="pe-flac-mixer: Automatic rough mix from FLAC multitrack stems.")
 console = Console()
@@ -108,28 +113,37 @@ def analyze(
 def mix(
     input_dir: str = typer.Argument(
         ...,
-        help="Path to folder containing multitrack FLAC recordings (supports Windows & Linux paths)",
+        help="Path to folder containing multitrack FLAC recordings (or parent folder in bulk mode)",
     ),
-    setup: str = typer.Option(
-        "probe",
+    setup: str | None = typer.Option(
+        None,
         "--setup",
         "-s",
-        help="Name of the setup (e.g. 'probe' for setups/probe.yml)",
+        help="Name of the setup (defaults to SETUP from .env or 'probe')",
     ),
     output_dir: str = typer.Option(
-        "./output",
+        "",
         "--output",
         "-o",
-        help="Target folder for rendered outputs (mix.mp3, mix.flac, mix.json)",
+        help="Target folder for rendered outputs (defaults to input_dir in bulk mode, or ./output in single mode)",
     ),
     name: str | None = typer.Option(
         None,
         "--name",
         "-n",
-        help="Base file name for the mix (defaults to name of input directory)",
+        help="Base file name for the mix (ignored in bulk mode)",
+    ),
+    bulk: bool = typer.Option(
+        False,
+        "--bulk",
+        "-b",
+        help="Bulk mode: iterate through all subdirectories (each representing a track/song)",
     ),
 ):
-    """Automatically generates a clean rough mix from multitrack stems."""
+    """Automatically generates a clean rough mix from multitrack stems (single or bulk mode)."""
+    env_setup = os.getenv("SETUP", "probe")
+    active_setup = setup if setup is not None else env_setup
+
     in_dir = normalize_path(input_dir)
     if not in_dir or not in_dir.is_dir():
         console.print(
@@ -137,7 +151,95 @@ def mix(
         )
         raise typer.Exit(code=1)
 
-    out_dir = normalize_path(output_dir) or Path("./output")
+    out_path_norm = normalize_path(output_dir)
+    if bulk:
+        out_dir = out_path_norm if out_path_norm and str(output_dir).strip() else in_dir
+    else:
+        out_dir = out_path_norm or Path("./output")
+
+    # Bulk Mode handling
+    if bulk:
+        console.print(
+            Panel(
+                f"[bold green]Starting Bulk Rough Mix Mode[/bold green]\n"
+                f"[bold]Parent Directory:[/bold] {in_dir}\n"
+                f"[bold]Setup:[/bold]            {active_setup}\n"
+                f"[bold]Output Directory:[/bold] {out_dir}\n",
+                title="pe-flac-mixer",
+            )
+        )
+
+        subdirs = [p for p in in_dir.iterdir() if p.is_dir()]
+        subdirs.sort()
+
+        if not subdirs:
+            console.print(f"[bold yellow]Warning: No subdirectories found in {in_dir}[/bold yellow]")
+            raise typer.Exit(code=0)
+
+        success_count = 0
+        error_count = 0
+
+        try:
+            setup_cfg = load_setup(active_setup)
+        except Exception as e:
+            console.print(f"[bold red]Error loading setup '{active_setup}':[/bold red] {e}")
+            raise typer.Exit(code=1)
+
+        for subdir in subdirs:
+            track_name = subdir.name
+            console.print(f"\n[bold cyan]▶ Processing track directory:[/bold cyan] {track_name}")
+
+            try:
+                matched, missing, unknown = validate_and_match_tracks(subdir, setup_cfg)
+                if not matched:
+                    console.print(f"  [yellow]Skipping {track_name}: No matching tracks found.[/yellow]")
+                    continue
+
+                if missing:
+                    console.print(f"  [dim]Note: {len(missing)} setup track(s) missing in {track_name}[/dim]")
+
+                analyses = analyze_tracks(matched, setup_cfg)
+                plan = generate_mix_plan(analyses, setup_cfg)
+                
+                track_out_dir = out_dir / track_name
+                output_files = render_mix(matched, plan, track_out_dir, base_name=track_name)
+
+                # Save analysis JSON
+                analysis_json_path = track_out_dir / f"{track_name}_analysis.json"
+                track_out_dir.mkdir(parents=True, exist_ok=True)
+                with open(analysis_json_path, "w", encoding="utf-8") as f:
+                    json.dump(
+                        {k: v.to_dict() for k, v in analyses.items()},
+                        f,
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+
+                console.print(f"  [green]✓ Successfully mixed {track_name}[/green]")
+                for fmt, path in output_files.items():
+                    console.print(f"    • {fmt.upper()}: {path}")
+                success_count += 1
+            except Exception as e:
+                console.print(f"  [bold red]✗ Error processing {track_name}:[/bold red] {e}")
+                error_count += 1
+
+        console.print(
+            Panel(
+                f"[bold green]Bulk Mixing Complete[/bold green]\n"
+                f"[bold]Successful:[/bold] {success_count}\n"
+                f"[bold]Errors/Skipped:[/bold] {error_count}",
+                title="pe-flac-mixer",
+            )
+        )
+        return
+
+    # Single mode
+    setup = active_setup
+    out_path_norm = normalize_path(output_dir)
+    if bulk:
+        out_dir = out_path_norm if out_path_norm and str(output_dir).strip() else in_dir
+    else:
+        out_dir = out_path_norm or Path("./output")
     base_name = name or in_dir.name
     console.print(
         Panel(

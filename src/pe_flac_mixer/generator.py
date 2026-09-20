@@ -1,5 +1,6 @@
 """Setup generation by analyzing and guessing tracks from an audio directory."""
 
+import json
 import re
 from pathlib import Path
 
@@ -135,45 +136,102 @@ def generate_setup_from_directory(
     input_dir: Path,
     setup_name: str | None = None,
 ) -> SetupConfig:
-    """Scans directory for FLAC files and creates a smart SetupConfig."""
-    flac_files = [f for f in input_dir.iterdir() if f.is_file() and f.suffix.lower() == ".flac"]
+    """Scans directory for FLAC/WAV files and creates a smart SetupConfig.
+    If a .uirecsession file is present in the directory, uses its channel names and mapping as the base.
+    """
+    uirec_path = input_dir / ".uirecsession"
+    if uirec_path.is_file():
+        try:
+            with open(uirec_path, "r", encoding="utf-8") as f:
+                uirec_data = json.load(f)
+            
+            files = uirec_data.get("files", [])
+            names = uirec_data.get("names", [])
+            ext = uirec_data.get("ext", ".flac")
+            
+            channels: dict[str, ChannelConfig] = {}
+            for i, filename_base in enumerate(files):
+                # The filename in directory might match filename_base + ext (e.g. "01 KICK.flac")
+                # Let's search for actual files matching filename_base.* in input_dir
+                actual_filename = None
+                for p in input_dir.iterdir():
+                    if p.is_file() and p.stem.lower() == filename_base.lower() and p.suffix.lower() in [".flac", ".wav"]:
+                        actual_filename = p.name
+                        break
+                
+                if not actual_filename:
+                    # Fallback construct filename with ext
+                    actual_filename = f"{filename_base}{ext}"
+                
+                track_name = names[i] if i < len(names) else filename_base
+                # Create a temporary path-like object to leverage guess_track_channel
+                dummy_path = input_dir / actual_filename
+                ch_cfg = guess_track_channel(dummy_path)
+                # Override instrument name with the official UI24R track name if appropriate or keep guessed
+                # Actually, let's refine name based on track_name
+                cleaned_name = track_name.strip().title()
+                if cleaned_name:
+                    ch_cfg.name = cleaned_name
+                
+                channels[actual_filename] = ch_cfg
+
+            if channels:
+                # Refine Vocals and Guitars distribution as in standard generator
+                _refine_channels_groups(channels)
+                name = setup_name or input_dir.name
+                return SetupConfig(
+                    name=name,
+                    description=f"Auto-generated setup from Soundcraft .uirecsession for {name} - Please review and adjust",
+                    channels=channels,
+                )
+        except Exception as e:
+            # Fallback to standard file scan if parsing fails
+            pass
+
+    flac_files = [f for f in input_dir.iterdir() if f.is_file() and f.suffix.lower() in [".flac", ".wav"]]
     flac_files.sort(key=natural_sort_key)
 
     if not flac_files:
-        raise ValueError(f"No FLAC files found in directory: {input_dir}")
+        raise ValueError(f"No FLAC or WAV files found in directory: {input_dir}")
 
-    channels: dict[str, ChannelConfig] = {}
+    channels = {}
     for f in flac_files:
         channels[f.name] = guess_track_channel(f)
 
-    # Pass 2: Refine Vocals and Guitars distribution
+    _refine_channels_groups(channels)
+
+    name = setup_name or input_dir.name
+    return SetupConfig(
+        name=name,
+        description=f"Auto-generated setup for {name} from {input_dir.name} - Please review and adjust",
+        channels=channels,
+    )
+
+
+def _refine_channels_groups(channels: dict[str, ChannelConfig]) -> None:
+    """Helper to refine vocal and guitar group assignments and panning."""
     vocal_keys = [k for k, ch in channels.items() if ch.group.startswith("vocals")]
     has_explicit_lead = any(channels[k].group == "vocals lead" for k in vocal_keys)
 
-    # Background vocal pan offsets to cycle through
     bg_pans = [0.2, -0.2, 0.35, -0.35, 0.5, -0.5]
     bg_pan_idx = 0
 
     if vocal_keys:
         if not has_explicit_lead:
-            # Assign first vocal as lead vocal
             lead_key = vocal_keys[0]
             channels[lead_key].group = "vocals lead"
             channels[lead_key].pan = 0.0
 
-            # Remaining vocals become background vocals
             for k in vocal_keys[1:]:
                 channels[k].group = "vocals background"
                 channels[k].pan = bg_pans[bg_pan_idx % len(bg_pans)]
                 bg_pan_idx += 1
         else:
-            # Assign pan offsets to remaining background vocals
             for k in vocal_keys:
                 if channels[k].group == "vocals background" and channels[k].pan == 0.0:
                     channels[k].pan = bg_pans[bg_pan_idx % len(bg_pans)]
                     bg_pan_idx += 1
 
-    # Balance mono guitars if both centered
     mono_guitars = [
         k
         for k, ch in channels.items()
@@ -182,13 +240,6 @@ def generate_setup_from_directory(
     if len(mono_guitars) == 2:
         channels[mono_guitars[0]].pan = -0.45
         channels[mono_guitars[1]].pan = 0.45
-
-    name = setup_name or input_dir.name
-    return SetupConfig(
-        name=name,
-        description=f"Auto-generated setup for {name} from {input_dir.name} - Please review and adjust",
-        channels=channels,
-    )
 
 
 def save_setup_file(setup: SetupConfig, output_path: Path, overwrite: bool = False) -> Path:
