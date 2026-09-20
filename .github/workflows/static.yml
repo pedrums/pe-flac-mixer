@@ -41,11 +41,11 @@ jobs:
         
       - name: Install dependencies & MkDocs
         run: |
-          uv sync
+          uv pip install --system mkdocs mkdocs-material mkdocstrings mkdocstrings-python
           
       - name: Build documentation with MkDocs
         run: |
-          uv run mkdocs build
+          mkdocs build
           
       - name: Setup Pages
         uses: actions/configure-pages@v5
