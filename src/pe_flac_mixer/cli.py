@@ -112,8 +112,8 @@ def analyze(
 @app.command()
 def mix(
     input_dir: str = typer.Argument(
-        ...,
-        help="Path to folder containing multitrack FLAC recordings (or parent folder in bulk mode)",
+        "",
+        help="Path to folder containing multitrack FLAC recordings (or parent folder in bulk mode). Defaults to RECORDS/SOURCE from .env if empty.",
     ),
     setup: str | None = typer.Option(
         None,
@@ -125,7 +125,7 @@ def mix(
         "",
         "--output",
         "-o",
-        help="Target folder for rendered outputs (defaults to input_dir in bulk mode, or ./output in single mode)",
+        help="Target folder for rendered outputs (defaults to input_dir in bulk mode, or input_dir in single mode)",
     ),
     name: str | None = typer.Option(
         None,
@@ -144,10 +144,24 @@ def mix(
     env_setup = os.getenv("SETUP", "probe")
     active_setup = setup if setup is not None else env_setup
 
-    in_dir = normalize_path(input_dir)
+    env_records = os.getenv("RECORDS", "")
+    env_source = os.getenv("SOURCE", "")
+    
+    if not input_dir or not str(input_dir).strip():
+        if env_records and env_source:
+            default_in = Path(env_records) / env_source
+            in_dir = normalize_path(str(default_in))
+        else:
+            console.print(
+                "[bold red]Error: Input directory not specified and RECORDS/SOURCE not found in .env[/bold red]"
+            )
+            raise typer.Exit(code=1)
+    else:
+        in_dir = normalize_path(input_dir)
+
     if not in_dir or not in_dir.is_dir():
         console.print(
-            f"[bold red]Error: Directory does not exist:[/bold red] {in_dir or input_dir}"
+            f"[bold red: Directory does not exist:[/bold red] {in_dir or input_dir}"
         )
         raise typer.Exit(code=1)
 
@@ -155,7 +169,7 @@ def mix(
     if bulk:
         out_dir = out_path_norm if out_path_norm and str(output_dir).strip() else in_dir
     else:
-        out_dir = out_path_norm or Path("./output")
+        out_dir = out_path_norm or in_dir
 
     # Bulk Mode handling
     if bulk:
@@ -201,7 +215,12 @@ def mix(
                 analyses = analyze_tracks(matched, setup_cfg)
                 plan = generate_mix_plan(analyses, setup_cfg)
                 
-                track_out_dir = out_dir / track_name
+                # If no explicit output_dir was provided, store bulk outputs directly in out_dir (RECORDS/SOURCE)
+                if not (out_path_norm and str(output_dir).strip()):
+                    track_out_dir = out_dir
+                else:
+                    track_out_dir = out_dir / track_name
+
                 output_files = render_mix(matched, plan, track_out_dir, base_name=track_name)
 
                 # Save analysis JSON
