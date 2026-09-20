@@ -1,4 +1,5 @@
 site_name: pe-flac-mixer
+site_url: https://pedrums.github.io/pe-flac-mixer/
 theme:
   name: material
   palette:
