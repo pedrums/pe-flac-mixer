@@ -4,8 +4,8 @@ import json
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
 import typer
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -212,7 +212,31 @@ def mix(
                 if missing:
                     console.print(f"  [dim]Note: {len(missing)} setup track(s) missing in {track_name}[/dim]")
 
-                analyses = analyze_tracks(matched, setup_cfg)
+                # Check if cached analysis exists in subdir
+                cached_json_path = subdir / "analysis.json"
+                analyses = None
+                
+                if cached_json_path.exists():
+                    try:
+                        with open(cached_json_path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                            from pe_flac_mixer.mix.analyzer import TrackAnalysis
+                            analyses = {k: TrackAnalysis.from_dict(v) for k, v in data.items()}
+                            console.print(f"  [dim]Using cached analysis from {cached_json_path.name}[/dim]")
+                    except Exception:
+                        analyses = None
+
+                if analyses is None:
+                    analyses = analyze_tracks(matched, setup_cfg)
+                    # Save analysis JSON in subdir
+                    with open(cached_json_path, "w", encoding="utf-8") as f:
+                        json.dump(
+                            {k: v.to_dict() for k, v in analyses.items()},
+                            f,
+                            indent=2,
+                            ensure_ascii=False,
+                        )
+
                 plan = generate_mix_plan(analyses, setup_cfg)
                 
                 # If no explicit output_dir was provided, store bulk outputs directly in out_dir (RECORDS/SOURCE)
@@ -222,17 +246,6 @@ def mix(
                     track_out_dir = out_dir / track_name
 
                 output_files = render_mix(matched, plan, track_out_dir, base_name=track_name)
-
-                # Save analysis JSON
-                analysis_json_path = track_out_dir / f"{track_name}_analysis.json"
-                track_out_dir.mkdir(parents=True, exist_ok=True)
-                with open(analysis_json_path, "w", encoding="utf-8") as f:
-                    json.dump(
-                        {k: v.to_dict() for k, v in analyses.items()},
-                        f,
-                        indent=2,
-                        ensure_ascii=False,
-                    )
 
                 console.print(f"  [green]✓ Successfully mixed {track_name}[/green]")
                 for fmt, path in output_files.items():

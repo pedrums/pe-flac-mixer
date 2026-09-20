@@ -184,7 +184,7 @@ def generate_setup_from_directory(
                     description=f"Auto-generated setup from Soundcraft .uirecsession for {name} - Please review and adjust",
                     channels=channels,
                 )
-        except Exception as e:
+        except Exception:
             # Fallback to standard file scan if parsing fails
             pass
 

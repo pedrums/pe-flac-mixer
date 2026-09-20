@@ -1,6 +1,5 @@
 """Audio-Rendering und Summierung."""
 
-import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -140,32 +139,22 @@ def render_mix(
             sr=master_sr,
         )
 
-        # 5. Export mit Dateinamen basierend auf base_name
-        flac_path = output_dir / f"{base_name}.flac"
+        # 5. Export mit Dateinamen basierend auf base_name (nur MP3)
         mp3_path = output_dir / f"{base_name}.mp3"
-        json_path = output_dir / f"{base_name}.json"
+        temp_flac_path = output_dir / f".temp_{base_name}.flac"
 
-        # FLAC schreiben
-        sf.write(str(flac_path), master_audio, master_sr, format="FLAC", subtype="PCM_24")
+        # Temporäres FLAC für ffmpeg erstellen
+        sf.write(str(temp_flac_path), master_audio, master_sr, format="FLAC", subtype="PCM_24")
 
-        # MP3 schreiben (prüft sf Format-Support oder ffmpeg)
         mp3_written = False
-        try:
-            if "MP3" in sf.available_formats():
-                sf.write(str(mp3_path), master_audio, master_sr, format="MP3")
-                mp3_written = True
-        except Exception:
-            mp3_written = False
-
-        if not mp3_written and shutil.which("ffmpeg"):
+        if shutil.which("ffmpeg"):
             try:
-                # Schnelle MP3-Konvertierung via ffmpeg (192 kbps für Probenmitschnitte ideal)
                 subprocess.run(
                     [
                         "ffmpeg",
                         "-y",
                         "-i",
-                        str(flac_path),
+                        str(temp_flac_path),
                         "-b:a",
                         "192k",
                         str(mp3_path),
@@ -177,18 +166,23 @@ def render_mix(
             except Exception:
                 pass
 
-        # mix.json speichern
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(mix_plan.to_dict(), f, indent=2, ensure_ascii=False)
+        if not mp3_written:
+            try:
+                if "MP3" in sf.available_formats():
+                    sf.write(str(mp3_path), master_audio, master_sr, format="MP3")
+                    mp3_written = True
+            except Exception:
+                pass
+
+        # Temporäres FLAC aufräumen
+        if temp_flac_path.exists():
+            temp_flac_path.unlink()
 
         # Temp Datei aufräumen
         if temp_sum_path.exists():
             temp_sum_path.unlink()
 
-        output_files = {
-            "flac": flac_path,
-            "json": json_path,
-        }
+        output_files = {}
         if mp3_written and mp3_path.exists():
             output_files["mp3"] = mp3_path
 
