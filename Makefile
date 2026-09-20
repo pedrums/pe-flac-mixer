@@ -1,4 +1,6 @@
 SETUP ?= probe
+RECORDS ?= /mnt/e/data2/HiDrive/Schlappseil/Musik/Proben/2026
+SOURCE ?= Probe_2026-09-15
 
 .DEFAULT_GOAL := help
 
@@ -15,6 +17,9 @@ dev: # Install development dependencies
 
 mix: # Render rough mix (args: INPUT=<path> [SETUP=<name>])
 	uv run pe-flac-mixer mix "$(INPUT)" --setup "$(SETUP)"
+
+bulk: # Render bulk mix for all subdirectories in RECORDS/SOURCE (args: RECORDS=<path> SOURCE=<name> [SETUP=<name>] [OUTPUT=<path>])
+	uv run pe-flac-mixer mix "$(RECORDS)/$(SOURCE)" --bulk --setup "$(SETUP)" $(if $(OUTPUT),--output "$(OUTPUT)",)
 
 analyze: # Analyze audio tracks (args: INPUT=<path> [SETUP=<name>])
 	uv run pe-flac-mixer analyze "$(INPUT)" --setup "$(SETUP)"
@@ -36,5 +41,11 @@ check: # Check linting and formatting
 	uv run ruff format --check .
 
 clean: # Remove cache, build artifacts, and __pycache__
-	rm -rf .pytest_cache .ruff_cache build dist *.egg-info
+	rm -rf .pytest_cache .ruff_cache build dist *.egg-info site
 	find . -type d -name "__pycache__" -exec rm -rf {} +
+
+doc: # Build documentation with mkdocs
+	uv run mkdocs build
+
+doc-serve: # Serve documentation locally with mkdocs
+	uv run mkdocs serve

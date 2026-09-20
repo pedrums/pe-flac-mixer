@@ -13,18 +13,6 @@ Automatic rough mix generator for band rehearsals and live recordings from FLAC 
 - **Auto-gain & Loudness balancing:** Consistent and balanced track levels.
 - **Master limiter & Normalization:** Exports punchy, distortion-free mixes in MP3 and FLAC (-14 LUFS integrated loudness, -1.0 dBFS true-peak ceiling).
 
-## Configuration (.env)
-
-You can define default values by copying `.env.example` to `.env`:
-
-```env
-SETUP=probe
-RECORDS=/path/to/hidrive/rehearsals/2026
-SOURCE=Probe_2026-09-15
-```
-
-This allows `make` commands to pick up these defaults automatically (e.g. `make mix` or `make bulk`).
-
 ## Installation
 
 Ensure [uv](https://github.com/astral-sh/uv) is installed:
@@ -42,9 +30,6 @@ uv run pe-flac-mixer mix ./aufnahme
 # Or specify a setup explicitly:
 uv run pe-flac-mixer mix ./aufnahme --setup probe
 
-# Bulk render a whole directory of rehearsal sessions (e.g. all subfolders in RECORDS):
-uv run pe-flac-mixer mix ./records/2026 --bulk --setup probe
-
 # Run analysis only (inspect levels & LUFS without rendering):
 uv run pe-flac-mixer analyze ./aufnahme --setup probe
 
@@ -56,7 +41,6 @@ Or using `make`:
 
 ```bash
 make mix INPUT=./aufnahme
-make bulk RECORDS=./records SOURCE=2026 SETUP=probe
 make analyze INPUT=./aufnahme
 make create-setup SOURCE=./aufnahme NAME=my_band
 ```

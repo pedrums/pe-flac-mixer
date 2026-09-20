@@ -1,0 +1,26 @@
+site_name: pe-flac-mixer
+theme:
+  name: material
+  palette:
+    scheme: default
+    primary: indigo
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: true
+
+nav:
+  - Home: index.md
+  - Overview (README): overview.md
+  - Workflow: TODO/workflow.md
+  - API Reference: api.md
