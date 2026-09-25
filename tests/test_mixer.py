@@ -10,9 +10,11 @@ from pe_flac_mixer.config import load_setup, validate_and_match_tracks
 from pe_flac_mixer.generator import generate_setup_from_directory, save_setup_file
 from pe_flac_mixer.mix.dsp import (
     apply_highpass,
+    compressor,
     create_highpass_sos,
     pan_mono_to_stereo,
     peak_limiter,
+    SimpleReverb,
 )
 from pe_flac_mixer.mix.planner import generate_mix_plan
 from pe_flac_mixer.mix.renderer import render_mix
@@ -98,6 +100,49 @@ def test_dsp_limiter():
     assert max_peak <= ceiling_linear + 1e-4
 
 
+def test_dsp_compressor():
+    """Test compressor reduces dynamic range."""
+    sr = 44100
+    # Signal mit großem dynamischen Bereich (0.1 bis 0.9)
+    t = np.linspace(0, 1.0, sr, endpoint=False)
+    signal = (0.1 + 0.8 * np.sin(2 * np.pi * 5 * t)).astype(np.float32)
+    stereo_audio = np.column_stack([signal, signal])
+
+    compressed = compressor(
+        stereo_audio,
+        threshold_db=-20.0,
+        ratio=4.0,
+        attack_ms=10.0,
+        release_ms=100.0,
+        sr=sr,
+    )
+
+    # Kompressor sollte Signal verarbeiten ohne NaNs/Infs
+    assert not np.isnan(compressed).any()
+    assert not np.isinf(compressed).any()
+    assert compressed.shape == stereo_audio.shape
+
+
+def test_dsp_reverb():
+    """Test simple reverb adds room reflections."""
+    sr = 44100
+    # Kurzer Impuls
+    signal = np.zeros(44100, dtype=np.float32)
+    signal[100:200] = 1.0
+    stereo_input = np.column_stack([signal, signal])
+
+    reverb = SimpleReverb(sr=sr, room_size=0.5, decay_time_sec=1.0)
+    output = reverb.process(stereo_input)
+
+    # Output sollte stereo sein
+    assert output.shape == (44100, 2)
+    # Reverb sollte kein NaN/Inf erzeugen
+    assert not np.isnan(output).any()
+    assert not np.isinf(output).any()
+    # Nach der initialen Pulskurve sollte noch etwas Hall-Energie vorhanden sein
+    assert np.max(np.abs(output[1000:])) > 0
+
+
 def test_bulk_mixing_mode(tmp_path: Path):
     """Test bulk mixing mode iterating over subdirectories."""
     bulk_root = tmp_path / "probe_session"
@@ -128,7 +173,7 @@ def test_bulk_mixing_mode(tmp_path: Path):
 
     runner = CliRunner()
     result = runner.invoke(app, ["mix", str(bulk_root), "--bulk", "--output", str(out_dir)])
-    
+
     assert result.exit_code == 0
     assert (out_dir / "Song_01" / "Song_01.flac" or out_dir / "Song_01" / "Song_01.mp3").exists() or True
     assert (out_dir / "Song_02").is_dir()
@@ -177,6 +222,11 @@ def test_full_pipeline_end_to_end(tmp_path: Path):
     assert "11 VOC MATSCHER.flac" in plan.tracks
     # Vocals should have highpass around 90 Hz for lead vocals
     assert plan.tracks["11 VOC MATSCHER.flac"].highpass_hz == 90.0
+
+    # Verify plan can be serialized to dict (for JSON export)
+    plan_dict = plan.to_dict()
+    assert plan_dict["setup_name"] == "Schlappseil"
+    assert "11 VOC MATSCHER.flac" in plan_dict["tracks"]
 
     # 5. Render mix
     output_files = render_mix(matched, plan, output_dir)
@@ -240,3 +290,34 @@ def test_create_setup_generator(tmp_path: Path):
     reloaded = load_setup(str(yaml_file))
     assert reloaded.name == "test_band"
     assert len(reloaded.channels) == 11
+
+
+def test_local_setup_override(tmp_path: Path):
+    """Test that local setup file in input directory takes precedence over global setup."""
+    # Create a local setup in a subdirectory
+    local_setup_dir = tmp_path / "song_with_guest_vocal"
+    local_setup_dir.mkdir()
+
+    # Create a local setup file in the directory
+    local_setup_yml = local_setup_dir / "setup_example.yml"
+    local_setup_yml.write_text("""
+name: "Guest Vocal Version"
+channels:
+  "01 KICK.flac":
+    name: "Kick"
+    group: "drums"
+    type: "mono"
+  "11 VOC GUEST.flac":
+    name: "Guest Vocal"
+    group: "vocals lead"
+    type: "mono"
+""")
+
+    # Load setup without input_dir (should fail for non-existent local file)
+    global_setup = load_setup("probe")
+    assert global_setup.name == "Schlappseil"
+
+    # Load setup WITH input_dir (should use local override)
+    local_setup = load_setup("probe", input_dir=local_setup_dir)
+    assert local_setup.name == "Guest Vocal Version"
+    assert "11 VOC GUEST.flac" in local_setup.channels

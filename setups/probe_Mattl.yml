@@ -74,13 +74,13 @@ channels:
 
   "11 VOC MATSCHER.flac":
     name: Vocals Matscher
-    group: vocals lead
+    group: vocals background
     type: mono
     pan: -0.2
 
   "12 VOC MATTEL.flac":
     name: Vocals Mattel
-    group: vocals background
+    group: vocals lead
     type: mono
     pan: 0.2
 
@@ -97,7 +97,7 @@ channels:
     pan: 0.35
 
   "15 VOC PETER.flac":
-    name: Vocals Peter (Lead)
+    name: Vocals Peter
     group: vocals background
     type: mono
     pan: 0.0

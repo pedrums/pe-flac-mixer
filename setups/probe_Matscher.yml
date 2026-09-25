@@ -97,7 +97,7 @@ channels:
     pan: 0.35
 
   "15 VOC PETER.flac":
-    name: Vocals Peter (Lead)
+    name: Vocals Peter
     group: vocals background
     type: mono
     pan: 0.0

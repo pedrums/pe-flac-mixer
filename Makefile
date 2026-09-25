@@ -1,4 +1,4 @@
-SETUP ?= probe
+SETUP ?= probe_Matscher
 RECORDS ?= /mnt/e/data2/HiDrive/Schlappseil/Musik/Proben/2026
 SOURCE ?= Probe_2026-09-15
 
@@ -18,8 +18,8 @@ dev: # Install development dependencies
 mix: # Render rough mix (args: INPUT=<path> [SETUP=<name>])
 	uv run pe-flac-mixer mix "$(INPUT)" --setup "$(SETUP)"
 
-bulk: # Render bulk mix for all subdirectories in RECORDS/SOURCE (args: RECORDS=<path> SOURCE=<name> [SETUP=<name>] [OUTPUT=<path>])
-	uv run pe-flac-mixer mix "$(RECORDS)/$(SOURCE)" --bulk --setup "$(SETUP)" $(if $(OUTPUT),--output "$(OUTPUT)",)
+bulk: # Render bulk mix for all subdirectories (args: RECORDS=<path> or RECORD=<path>, SOURCE=<name> [SETUP=<name>] [OUTPUT=<path>])
+	uv run pe-flac-mixer mix "$(or $(RECORDS),$(RECORD))/$(SOURCE)" --bulk --setup "$(SETUP)" $(if $(OUTPUT),--output "$(OUTPUT)",)
 
 analyze: # Analyze audio tracks (args: INPUT=<path> [SETUP=<name>])
 	uv run pe-flac-mixer analyze "$(INPUT)" --setup "$(SETUP)"

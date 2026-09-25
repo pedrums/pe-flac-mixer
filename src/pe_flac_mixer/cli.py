@@ -52,7 +52,7 @@ def analyze(
     )
 
     try:
-        setup_cfg = load_setup(setup)
+        setup_cfg = load_setup(setup, input_dir=dir_path)
     except Exception as e:
         console.print(f"[bold red]Error loading setup:[/bold red] {e}")
         raise typer.Exit(code=1)
@@ -79,7 +79,32 @@ def analyze(
         raise typer.Exit(code=1)
 
     console.print("\n[bold]Analyzing tracks...[/bold]")
-    analyses = analyze_tracks(matched, setup_cfg)
+    
+    # Check if cached analysis exists (in input directory alongside FLAC files)
+    analysis_json_path = dir_path / f"{setup}_analysis.json"
+    analyses = None
+    
+    if analysis_json_path.exists():
+        try:
+            with open(analysis_json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                from pe_flac_mixer.mix.analyzer import TrackAnalysis
+                analyses = {k: TrackAnalysis.from_dict(v) for k, v in data.items()}
+                console.print(f"  [dim]Using cached analysis from {analysis_json_path.name}[/dim]")
+        except Exception:
+            analyses = None
+    
+    if analyses is None:
+        analyses = analyze_tracks(matched, setup_cfg)
+        # Save analysis as JSON alongside FLAC files
+        analysis_json_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(analysis_json_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {k: v.to_dict() for k, v in analyses.items()},
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
 
     table = Table(title="Track Analysis")
     table.add_column("File", style="cyan")
@@ -161,7 +186,7 @@ def mix(
 
     if not in_dir or not in_dir.is_dir():
         console.print(
-            f"[bold red: Directory does not exist:[/bold red] {in_dir or input_dir}"
+            f"[bold red]Error: Directory does not exist:[/bold red] {in_dir or input_dir}"
         )
         raise typer.Exit(code=1)
 
@@ -177,8 +202,8 @@ def mix(
             Panel(
                 f"[bold green]Starting Bulk Rough Mix Mode[/bold green]\n"
                 f"[bold]Parent Directory:[/bold] {in_dir}\n"
-                f"[bold]Setup:[/bold]            {active_setup}\n"
-                f"[bold]Output Directory:[/bold] {out_dir}\n",
+                f"[bold]Output Directory:[/bold] {out_dir}\n"
+                f"[bold]Global Setup:[/bold]     {active_setup} (override per directory with local {active_setup}.yml)",
                 title="pe-flac-mixer",
             )
         )
@@ -193,15 +218,25 @@ def mix(
         success_count = 0
         error_count = 0
 
-        try:
-            setup_cfg = load_setup(active_setup)
-        except Exception as e:
-            console.print(f"[bold red]Error loading setup '{active_setup}':[/bold red] {e}")
-            raise typer.Exit(code=1)
-
         for subdir in subdirs:
             track_name = subdir.name
             console.print(f"\n[bold cyan]▶ Processing track directory:[/bold cyan] {track_name}")
+
+            try:
+                # Check for local setup override in subdir first, then fall back to global setup
+                setup_cfg = load_setup(active_setup, input_dir=subdir)
+            except Exception as e:
+                console.print(f"  [bold red]Error loading setup '{active_setup}':[/bold red] {e}")
+                error_count += 1
+                continue
+            
+            # Determine if local setup file was used (any setup*.yml/yaml file in subdir)
+            setup_files = sorted(list(subdir.glob("setup*.yml")) + list(subdir.glob("setup*.yaml")))
+            if setup_files:
+                used_setup_file = setup_files[0]
+                console.print(f"  [bold yellow]Using local setup override:[/bold yellow] {used_setup_file.name}")
+            else:
+                console.print(f"  [dim]Using global setup:[/dim] {active_setup}")
 
             try:
                 matched, missing, unknown = validate_and_match_tracks(subdir, setup_cfg)
@@ -213,7 +248,7 @@ def mix(
                     console.print(f"  [dim]Note: {len(missing)} setup track(s) missing in {track_name}[/dim]")
 
                 # Check if cached analysis exists in subdir
-                cached_json_path = subdir / "analysis.json"
+                cached_json_path = subdir / f"{active_setup}_analysis.json"
                 analyses = None
                 
                 if cached_json_path.exists():
@@ -225,10 +260,11 @@ def mix(
                             console.print(f"  [dim]Using cached analysis from {cached_json_path.name}[/dim]")
                     except Exception:
                         analyses = None
-
+                
                 if analyses is None:
                     analyses = analyze_tracks(matched, setup_cfg)
                     # Save analysis JSON in subdir
+                    cached_json_path.parent.mkdir(parents=True, exist_ok=True)
                     with open(cached_json_path, "w", encoding="utf-8") as f:
                         json.dump(
                             {k: v.to_dict() for k, v in analyses.items()},
@@ -246,6 +282,13 @@ def mix(
                     track_out_dir = out_dir / track_name
 
                 output_files = render_mix(matched, plan, track_out_dir, base_name=track_name)
+                
+                # Save mix plan as JSON alongside output files
+                plan_json_path = track_out_dir / f"{track_name}_mix_plan.json"
+                plan_json_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(plan_json_path, "w", encoding="utf-8") as f:
+                    json.dump(plan.to_dict(), f, indent=2, ensure_ascii=False)
+                console.print(f"  [dim]Mix plan saved: {plan_json_path.name}[/dim]")
 
                 console.print(f"  [green]✓ Successfully mixed {track_name}[/green]")
                 for fmt, path in output_files.items():
@@ -284,7 +327,7 @@ def mix(
     )
 
     try:
-        setup_cfg = load_setup(setup)
+        setup_cfg = load_setup(setup, input_dir=in_dir)
     except Exception as e:
         console.print(f"[bold red]Error loading setup:[/bold red] {e}")
         raise typer.Exit(code=1)
@@ -305,7 +348,32 @@ def mix(
 
     # 1. Analysis
     console.print(f"\n[bold]1. Analyzing {len(matched)} tracks...[/bold]")
-    analyses = analyze_tracks(matched, setup_cfg)
+    
+    # Check if cached analysis exists (in input directory alongside FLAC files)
+    analysis_json_path = in_dir / f"{setup}_analysis.json"
+    analyses = None
+    
+    if analysis_json_path.exists():
+        try:
+            with open(analysis_json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                from pe_flac_mixer.mix.analyzer import TrackAnalysis
+                analyses = {k: TrackAnalysis.from_dict(v) for k, v in data.items()}
+                console.print(f"  [dim]Using cached analysis from {analysis_json_path.name}[/dim]")
+        except Exception:
+            analyses = None
+    
+    if analyses is None:
+        analyses = analyze_tracks(matched, setup_cfg)
+        # Save analysis as JSON alongside FLAC files
+        analysis_json_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(analysis_json_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {k: v.to_dict() for k, v in analyses.items()},
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
 
     # 2. Heuristic Mix Plan
     console.print("[bold]2. Calculating mix plan...[/bold]")
@@ -337,22 +405,19 @@ def mix(
 
     # 3. DSP & Rendering
     console.print("\n[bold]3. Rendering mix & applying master limiter...[/bold]")
-    output_files = render_mix(matched, plan, output_dir, base_name=base_name)
-
-    # Save analysis as JSON alongside mix
-    analysis_json_path = output_dir / f"{base_name}_analysis.json"
-    with open(analysis_json_path, "w", encoding="utf-8") as f:
-        json.dump(
-            {k: v.to_dict() for k, v in analyses.items()},
-            f,
-            indent=2,
-            ensure_ascii=False,
-        )
+    output_files = render_mix(matched, plan, out_dir, base_name=base_name)
+    
+    # Save mix plan as JSON alongside output files
+    plan_json_path = out_dir / f"{base_name}_mix_plan.json"
+    plan_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(plan_json_path, "w", encoding="utf-8") as f:
+        json.dump(plan.to_dict(), f, indent=2, ensure_ascii=False)
 
     console.print("\n[bold green]✓ Mix finished successfully![/bold green]")
     for fmt, path in output_files.items():
         console.print(f"  [bold]• {fmt.upper()}:[/bold] {path}")
     console.print(f"  [bold]• ANALYSIS:[/bold] {analysis_json_path}")
+    console.print(f"  [bold]• MIX PLAN:[/bold] {plan_json_path}")
 
 
 @app.command(name="create-setup")

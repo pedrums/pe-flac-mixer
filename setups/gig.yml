@@ -1,6 +1,16 @@
 name: Gig
 description: Digitalmixer-Setup mit durchnummerierten Kanälen
 
+# Target loudness levels per group (in LUFS)
+group_levels:
+  vocals lead: -14.0
+  vocals background: -23.0
+  drums: -21.0
+  bass: -21.0
+  guitars: -23.0
+  keys: -23.0
+  other: -23.0
+
 channels:
   CH01.flac:
     name: Kick

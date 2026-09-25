@@ -23,7 +23,7 @@ class TrackMixParams:
 @dataclass
 class MasterMixParams:
     target_lufs: float = -14.0
-    limiter_ceiling_db: float = -1.0
+    limiter_ceiling_db: float = -0.5
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -46,17 +46,17 @@ class MixPlan:
 # Ziel-Lautheiten (LUFS) für Instrumentengruppen im Übungsmix
 TARGET_LUFS_BY_GROUP = {
     # Gesang differenziert: Lead klar im Vordergrund, Background dezent dahinter
-    "vocals lead": -16.0,  # Lead-Gesang: präsent ganz vorne im Mix
-    "lead vocals": -16.0,
-    "lead vocal": -16.0,
-    "lead": -16.0,
+    "vocals lead": -14.0,  # Lead-Gesang: präsent ganz vorne im Mix
+    "lead vocals": -14.0,
+    "lead vocal": -14.0,
+    "lead": -14.0,
     "vocals background": -23.0,  # Background/Chor: aufgeräumt im Hintergrund
     "background vocals": -23.0,
     "backing vocals": -23.0,
     "background": -23.0,
     "backing": -23.0,
-    "vocals": -18.0,  # Standard falls keine Unterscheidung getroffen wurde
-    "vocal": -18.0,
+    "vocals": -15.0,  # Standard falls keine Unterscheidung getroffen wurde
+    "vocal": -15.0,
     # Rhythmusgruppe & Instrumente
     "bass": -21.0,  # Fundament
     "drums": -21.0,
@@ -142,8 +142,18 @@ def generate_mix_plan(analyses: dict[str, TrackAnalysis], setup: SetupConfig) ->
                 highpass_hz = 50.0
 
         # 2. Ziel-Lautheit bestimmen
-        # Gruppe hat bei differenziertem Gesang Vorrang vor generischem Instrumentennamen
-        target_lufs = TARGET_LUFS_BY_GROUP.get(group_lower)
+        # Prüfe zuerst Setup-spezifische group_levels, dann fallback auf globale TARGET_LUFS_BY_GROUP
+        target_lufs = None
+        
+        # 2a. Prüfe Setup-spezifische group_levels
+        if setup.group_levels:
+            target_lufs = setup.group_levels.get(group_lower)
+        
+        # 2b. Fallback auf globale Konstanten
+        if target_lufs is None:
+            target_lufs = TARGET_LUFS_BY_GROUP.get(group_lower)
+        
+        # 2c. Falls noch nicht gefunden, versuche Instrument-Name
         if target_lufs is None:
             target_lufs = TARGET_LUFS_BY_INSTRUMENT.get(
                 inst_lower, TARGET_LUFS_BY_GROUP.get("other", -23.0)
@@ -186,5 +196,5 @@ def generate_mix_plan(analyses: dict[str, TrackAnalysis], setup: SetupConfig) ->
     return MixPlan(
         setup_name=setup.name,
         tracks=tracks_plan,
-        master=MasterMixParams(target_lufs=-14.0, limiter_ceiling_db=-1.0),
+        master=MasterMixParams(target_lufs=-14.0, limiter_ceiling_db=-0.5),
     )

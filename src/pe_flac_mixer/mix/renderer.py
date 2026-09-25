@@ -11,10 +11,12 @@ import soundfile as sf
 from pe_flac_mixer.mix.dsp import (
     apply_gain,
     apply_highpass,
+    compressor,
     create_highpass_sos,
     pan_mono_to_stereo,
     pan_stereo,
     peak_limiter,
+    SimpleReverb,
 )
 from pe_flac_mixer.mix.planner import MixPlan
 
@@ -27,8 +29,10 @@ def render_mix(
     block_size: int = 65536,
 ) -> dict[str, Path]:
     """
-    Rendert die Spuren nach dem Mixplan blockweise zu einer Summe,
-    wendet Master-Limiting & Normalisierung an und exportiert FLAC, MP3 und JSON.
+    Rendert die Spuren nach dem Mixplan blockweise zu einer Summe mit Subgruppen-Processing:
+    - Drums-Subgruppe mit Compressor & Reverb
+    - Vocals-Subgruppe mit Compressor & Reverb
+    - Master-Limiter & Normalisierung
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -61,7 +65,11 @@ def render_mix(
                 sos = create_highpass_sos(params.highpass_hz, master_sr)
                 filters[filename] = (sos, None)
 
-        # 3. Temporäre Summen-Datei streamen
+        # 3. Subgruppen-Reverb initialisieren (subtil, um Verzerrung zu vermeiden)
+        drums_reverb = SimpleReverb(sr=master_sr, room_size=0.25, decay_time_sec=1.2)
+        vocals_reverb = SimpleReverb(sr=master_sr, room_size=0.3, decay_time_sec=1.5)
+
+        # 4. Temporäre Summen-Datei streamen mit Subgruppen
         temp_sum_path = output_dir / f".temp_{base_name}_sum.wav"
         with sf.SoundFile(
             str(temp_sum_path),
@@ -73,7 +81,11 @@ def render_mix(
             frames_processed = 0
             while frames_processed < max_frames:
                 current_block_len = min(block_size, max_frames - frames_processed)
-                sum_block = np.zeros((current_block_len, 2), dtype=np.float32)
+                
+                # Subgruppen-Puffer
+                drums_block = np.zeros((current_block_len, 2), dtype=np.float32)
+                vocals_block = np.zeros((current_block_len, 2), dtype=np.float32)
+                other_block = np.zeros((current_block_len, 2), dtype=np.float32)
 
                 for filename, sf_obj in sound_files.items():
                     params = mix_plan.tracks.get(filename)
@@ -84,7 +96,6 @@ def render_mix(
                     if len(raw_block) == 0:
                         continue
 
-                    # Falls Track kürzer als Block
                     block_len = len(raw_block)
 
                     # Highpass Filter
@@ -105,13 +116,50 @@ def render_mix(
                     else:
                         stereo_block = pan_stereo(track_audio, params.pan)
 
-                    sum_block[:block_len] += stereo_block
+                    # Routen zu Subgruppe basierend auf Track-Gruppe
+                    track_group = params.group.lower() if params.group else ""
+                    
+                    if "drum" in track_group:
+                        drums_block[:block_len] += stereo_block
+                    elif "vocal" in track_group:
+                        vocals_block[:block_len] += stereo_block
+                    else:
+                        other_block[:block_len] += stereo_block
+
+                # Subgruppen-Processing: Compressor + Reverb
+                # Drums: knackiger Sound mit kürzerem Release, sanfte Kompression
+                drums_block = compressor(
+                    drums_block,
+                    threshold_db=-20.0,
+                    ratio=2.5,
+                    attack_ms=8.0,
+                    release_ms=100.0,
+                    makeup_gain_db=0.5,
+                    sr=master_sr,
+                )
+                drums_wet = drums_reverb.process(drums_block)
+                drums_block = 0.90 * drums_block + 0.10 * drums_wet
+
+                # Vocals: wärmerer Sound mit längerer Release, sanfte Kompression
+                vocals_block = compressor(
+                    vocals_block,
+                    threshold_db=-18.0,
+                    ratio=2.0,
+                    attack_ms=10.0,
+                    release_ms=120.0,
+                    makeup_gain_db=0.3,
+                    sr=master_sr,
+                )
+                vocals_wet = vocals_reverb.process(vocals_block)
+                vocals_block = 0.88 * vocals_block + 0.12 * vocals_wet
+
+                # Subgruppen auf Master summieren
+                sum_block = drums_block + vocals_block + other_block
 
                 sum_out.write(sum_block)
                 frames_processed += current_block_len
 
-        # 4. Master Normalisierung & Limiter
-        # Gesamtsumme für Lautheitsabgleich und Limiter laden
+        # 5. Master Normalisierung & Limiter
         master_audio, _ = sf.read(str(temp_sum_path), dtype="float32")
 
         # LUFS der Summe messen

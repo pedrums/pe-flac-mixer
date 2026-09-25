@@ -48,16 +48,47 @@ class SetupConfig:
     name: str
     description: str = ""
     channels: dict[str, ChannelConfig] = field(default_factory=dict)
+    group_levels: dict[str, float] = field(default_factory=dict)  # Target LUFS per group
 
 
-def load_setup(setup_name_or_path: str, setups_dir: Path | None = None) -> SetupConfig:
-    """Loads a mixer setup from a YAML file or by setup name."""
+def load_setup(setup_name_or_path: str, setups_dir: Path | None = None, input_dir: Path | None = None) -> SetupConfig:
+    """Loads a mixer setup from a YAML file or by setup name.
+    
+    Search order:
+    1. Direct file path (if setup_name_or_path is a valid file)
+    2. Any local setup file in input_dir matching setup*.yml or setup*.yaml (auto-detect)
+    3. Named setup in input_dir (e.g., input_dir/probe.yml)
+    4. Standard setups/ directory (e.g., setups/probe.yml)
+    """
     norm = normalize_path(setup_name_or_path)
     path = norm if norm else Path(setup_name_or_path)
 
     # 1. Direct path to file
-    if not path.is_file():
-        # 2. Search in setups/
+    if path.is_file():
+        pass  # Use path as-is
+    # 2. Check for ANY local setup file in input_dir matching setup*.yml/yaml (auto-detect)
+    elif input_dir and input_dir.is_dir():
+        # Look for any setup*.yml or setup*.yaml file in input_dir
+        setup_files = sorted(list(input_dir.glob("setup*.yml")) + list(input_dir.glob("setup*.yaml")))
+        if setup_files:
+            # Use the first found setup file (alphabetically sorted)
+            path = setup_files[0]
+        else:
+            # If no setup* file found, try named setup in input_dir
+            local_candidate1 = input_dir / f"{setup_name_or_path}.yml"
+            local_candidate2 = input_dir / f"{setup_name_or_path}.yaml"
+            if local_candidate1.is_file():
+                path = local_candidate1
+            elif local_candidate2.is_file():
+                path = local_candidate2
+            # If not found locally, continue to standard setups/ directory
+            else:
+                path = None
+    else:
+        path = None
+    
+    # 3. Search in standard setups/ directory
+    if path is None or not path.is_file():
         base_dir = setups_dir or (Path.cwd() / "setups")
         candidate1 = base_dir / f"{setup_name_or_path}.yml"
         candidate2 = base_dir / f"{setup_name_or_path}.yaml"
@@ -68,7 +99,7 @@ def load_setup(setup_name_or_path: str, setups_dir: Path | None = None) -> Setup
             path = candidate2
         else:
             raise FileNotFoundError(
-                f"Setup '{setup_name_or_path}' not found (neither as direct file nor in {base_dir})."
+                f"Setup '{setup_name_or_path}' not found (checked: input_dir={input_dir}, setups_dir={base_dir})."
             )
 
     with open(path, "r", encoding="utf-8") as f:
@@ -88,6 +119,7 @@ def load_setup(setup_name_or_path: str, setups_dir: Path | None = None) -> Setup
         name=data.get("name", path.stem),
         description=data.get("description", ""),
         channels=channels,
+        group_levels=data.get("group_levels", {}),  # Load group_levels from YAML if present
     )
 
 
