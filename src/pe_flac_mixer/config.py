@@ -51,9 +51,11 @@ class SetupConfig:
     group_levels: dict[str, float] = field(default_factory=dict)  # Target LUFS per group
 
 
-def load_setup(setup_name_or_path: str, setups_dir: Path | None = None, input_dir: Path | None = None) -> SetupConfig:
+def load_setup(
+    setup_name_or_path: str, setups_dir: Path | None = None, input_dir: Path | None = None
+) -> SetupConfig:
     """Loads a mixer setup from a YAML file or by setup name.
-    
+
     Search order:
     1. Direct file path (if setup_name_or_path is a valid file)
     2. Any local setup file in input_dir matching setup*.yml or setup*.yaml (auto-detect)
@@ -69,7 +71,9 @@ def load_setup(setup_name_or_path: str, setups_dir: Path | None = None, input_di
     # 2. Check for ANY local setup file in input_dir matching setup*.yml/yaml (auto-detect)
     elif input_dir and input_dir.is_dir():
         # Look for any setup*.yml or setup*.yaml file in input_dir
-        setup_files = sorted(list(input_dir.glob("setup*.yml")) + list(input_dir.glob("setup*.yaml")))
+        setup_files = sorted(
+            list(input_dir.glob("setup*.yml")) + list(input_dir.glob("setup*.yaml"))
+        )
         if setup_files:
             # Use the first found setup file (alphabetically sorted)
             path = setup_files[0]
@@ -86,7 +90,7 @@ def load_setup(setup_name_or_path: str, setups_dir: Path | None = None, input_di
                 path = None
     else:
         path = None
-    
+
     # 3. Search in standard setups/ directory
     if path is None or not path.is_file():
         base_dir = setups_dir or (Path.cwd() / "setups")

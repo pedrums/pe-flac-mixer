@@ -144,25 +144,29 @@ def generate_setup_from_directory(
         try:
             with open(uirec_path, "r", encoding="utf-8") as f:
                 uirec_data = json.load(f)
-            
+
             files = uirec_data.get("files", [])
             names = uirec_data.get("names", [])
             ext = uirec_data.get("ext", ".flac")
-            
+
             channels: dict[str, ChannelConfig] = {}
             for i, filename_base in enumerate(files):
                 # The filename in directory might match filename_base + ext (e.g. "01 KICK.flac")
                 # Let's search for actual files matching filename_base.* in input_dir
                 actual_filename = None
                 for p in input_dir.iterdir():
-                    if p.is_file() and p.stem.lower() == filename_base.lower() and p.suffix.lower() in [".flac", ".wav"]:
+                    if (
+                        p.is_file()
+                        and p.stem.lower() == filename_base.lower()
+                        and p.suffix.lower() in [".flac", ".wav"]
+                    ):
                         actual_filename = p.name
                         break
-                
+
                 if not actual_filename:
                     # Fallback construct filename with ext
                     actual_filename = f"{filename_base}{ext}"
-                
+
                 track_name = names[i] if i < len(names) else filename_base
                 # Create a temporary path-like object to leverage guess_track_channel
                 dummy_path = input_dir / actual_filename
@@ -172,7 +176,7 @@ def generate_setup_from_directory(
                 cleaned_name = track_name.strip().title()
                 if cleaned_name:
                     ch_cfg.name = cleaned_name
-                
+
                 channels[actual_filename] = ch_cfg
 
             if channels:
@@ -188,7 +192,9 @@ def generate_setup_from_directory(
             # Fallback to standard file scan if parsing fails
             pass
 
-    flac_files = [f for f in input_dir.iterdir() if f.is_file() and f.suffix.lower() in [".flac", ".wav"]]
+    flac_files = [
+        f for f in input_dir.iterdir() if f.is_file() and f.suffix.lower() in [".flac", ".wav"]
+    ]
     flac_files.sort(key=natural_sort_key)
 
     if not flac_files:

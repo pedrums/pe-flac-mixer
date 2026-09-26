@@ -144,15 +144,15 @@ def generate_mix_plan(analyses: dict[str, TrackAnalysis], setup: SetupConfig) ->
         # 2. Ziel-Lautheit bestimmen
         # Prüfe zuerst Setup-spezifische group_levels, dann fallback auf globale TARGET_LUFS_BY_GROUP
         target_lufs = None
-        
+
         # 2a. Prüfe Setup-spezifische group_levels
         if setup.group_levels:
             target_lufs = setup.group_levels.get(group_lower)
-        
+
         # 2b. Fallback auf globale Konstanten
         if target_lufs is None:
             target_lufs = TARGET_LUFS_BY_GROUP.get(group_lower)
-        
+
         # 2c. Falls noch nicht gefunden, versuche Instrument-Name
         if target_lufs is None:
             target_lufs = TARGET_LUFS_BY_INSTRUMENT.get(

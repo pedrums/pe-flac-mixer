@@ -79,21 +79,22 @@ def analyze(
         raise typer.Exit(code=1)
 
     console.print("\n[bold]Analyzing tracks...[/bold]")
-    
+
     # Check if cached analysis exists (in input directory alongside FLAC files)
     analysis_json_path = dir_path / f"{setup}_analysis.json"
     analyses = None
-    
+
     if analysis_json_path.exists():
         try:
             with open(analysis_json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 from pe_flac_mixer.mix.analyzer import TrackAnalysis
+
                 analyses = {k: TrackAnalysis.from_dict(v) for k, v in data.items()}
                 console.print(f"  [dim]Using cached analysis from {analysis_json_path.name}[/dim]")
         except Exception:
             analyses = None
-    
+
     if analyses is None:
         analyses = analyze_tracks(matched, setup_cfg)
         # Save analysis as JSON alongside FLAC files
@@ -135,10 +136,120 @@ def analyze(
 
 
 @app.command()
+def cut(
+    file_path: str = typer.Argument(
+        ...,
+        help="Path to the MP3 file to cut",
+    ),
+    sec: float = typer.Option(
+        3.0,
+        "--sec",
+        "-s",
+        help="Number of seconds to cut from the beginning",
+    ),
+    output: str | None = typer.Option(
+        None,
+        "--output",
+        "-o",
+        help="Optional output path (defaults to overwriting or creating a new file)",
+    ),
+):
+    """Cuts X seconds from the beginning of an MP3 file."""
+    path = normalize_path(file_path)
+    if not path or not path.is_file():
+        console.print(f"[bold red]Error: File does not exist:[/bold red] {file_path}")
+        raise typer.Exit(code=1)
+
+    out_path = normalize_path(output) if output else path
+
+    console.print(
+        Panel(
+            f"[bold green]Cutting MP3 File[/bold green]\n"
+            f"[bold]Input:[/bold]  {path}\n"
+            f"[bold]Cut:[/bold]    {sec} seconds from start\n"
+            f"[bold]Output:[/bold] {out_path}",
+            title="pe-flac-mixer",
+        )
+    )
+
+    try:
+        import shutil
+        import subprocess
+
+        import soundfile as sf
+
+        audio, sr = sf.read(str(path), dtype="float32")
+
+        cut_samples = int(sec * sr)
+        if cut_samples >= len(audio):
+            console.print(
+                "[bold red]Error: Cut duration is longer than or equal to the audio file duration.[/bold red]"
+            )
+            raise typer.Exit(code=1)
+
+        trimmed_audio = audio[cut_samples:]
+
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # If it's an MP3 file, soundfile might write via ffmpeg or directly.
+        # Let's save via temp FLAC + ffmpeg if available to ensure standard high-quality MP3 encoding like render_mix
+        if path.suffix.lower() == ".mp3" and shutil.which("ffmpeg"):
+            temp_flac = out_path.with_suffix(".tmp.flac")
+            sf.write(str(temp_flac), trimmed_audio, sr, format="FLAC", subtype="PCM_24")
+            try:
+                subprocess.run(
+                    [
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        str(temp_flac),
+                        "-b:a",
+                        "192k",
+                        str(out_path),
+                    ],
+                    check=True,
+                    capture_output=True,
+                )
+            finally:
+                if temp_flac.exists():
+                    temp_flac.unlink()
+        else:
+            try:
+                sf.write(str(out_path), trimmed_audio, sr)
+            except Exception:
+                # Fallback via ffmpeg command if soundfile format error
+                if shutil.which("ffmpeg"):
+                    subprocess.run(
+                        [
+                            "ffmpeg",
+                            "-y",
+                            "-ss",
+                            str(sec),
+                            "-i",
+                            str(path),
+                            "-codec",
+                            "copy",
+                            str(out_path),
+                        ],
+                        check=True,
+                        capture_output=True,
+                    )
+                else:
+                    raise
+
+        console.print(f"[bold green]✓ Successfully cut {sec}s from {path.name}[/bold green]")
+        console.print(f"  [bold]• Output saved to:[/bold] {out_path}")
+
+    except Exception as e:
+        console.print(f"[bold red]Error processing audio file:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+
+@app.command()
 def mix(
     input_dir: str = typer.Argument(
         "",
-        help="Path to folder containing multitrack FLAC recordings (or parent folder in bulk mode). Defaults to RECORDS/SOURCE from .env if empty.",
+        help="Path to folder containing multitrack FLAC recordings (or parent folder in bulk mode). Tip: use '--bulk' for processing all subdirectories as songs.",
     ),
     setup: str | None = typer.Option(
         None,
@@ -171,16 +282,14 @@ def mix(
 
     env_records = os.getenv("RECORDS", "")
     env_source = os.getenv("SOURCE", "")
-    
+
     if not input_dir or not str(input_dir).strip():
         if env_records and env_source:
             default_in = Path(env_records) / env_source
             in_dir = normalize_path(str(default_in))
         else:
-            console.print(
-                "[bold red]Error: Input directory not specified and RECORDS/SOURCE not found in .env[/bold red]"
-            )
-            raise typer.Exit(code=1)
+            # Fallback to current working directory (.) if nothing specified
+            in_dir = Path.cwd()
     else:
         in_dir = normalize_path(input_dir)
 
@@ -212,7 +321,9 @@ def mix(
         subdirs.sort()
 
         if not subdirs:
-            console.print(f"[bold yellow]Warning: No subdirectories found in {in_dir}[/bold yellow]")
+            console.print(
+                f"[bold yellow]Warning: No subdirectories found in {in_dir}[/bold yellow]"
+            )
             raise typer.Exit(code=0)
 
         success_count = 0
@@ -229,38 +340,47 @@ def mix(
                 console.print(f"  [bold red]Error loading setup '{active_setup}':[/bold red] {e}")
                 error_count += 1
                 continue
-            
+
             # Determine if local setup file was used (any setup*.yml/yaml file in subdir)
             setup_files = sorted(list(subdir.glob("setup*.yml")) + list(subdir.glob("setup*.yaml")))
             if setup_files:
                 used_setup_file = setup_files[0]
-                console.print(f"  [bold yellow]Using local setup override:[/bold yellow] {used_setup_file.name}")
+                console.print(
+                    f"  [bold yellow]Using local setup override:[/bold yellow] {used_setup_file.name}"
+                )
             else:
                 console.print(f"  [dim]Using global setup:[/dim] {active_setup}")
 
             try:
                 matched, missing, unknown = validate_and_match_tracks(subdir, setup_cfg)
                 if not matched:
-                    console.print(f"  [yellow]Skipping {track_name}: No matching tracks found.[/yellow]")
+                    console.print(
+                        f"  [yellow]Skipping {track_name}: No matching tracks found.[/yellow]"
+                    )
                     continue
 
                 if missing:
-                    console.print(f"  [dim]Note: {len(missing)} setup track(s) missing in {track_name}[/dim]")
+                    console.print(
+                        f"  [dim]Note: {len(missing)} setup track(s) missing in {track_name}[/dim]"
+                    )
 
                 # Check if cached analysis exists in subdir
                 cached_json_path = subdir / f"{active_setup}_analysis.json"
                 analyses = None
-                
+
                 if cached_json_path.exists():
                     try:
                         with open(cached_json_path, "r", encoding="utf-8") as f:
                             data = json.load(f)
                             from pe_flac_mixer.mix.analyzer import TrackAnalysis
+
                             analyses = {k: TrackAnalysis.from_dict(v) for k, v in data.items()}
-                            console.print(f"  [dim]Using cached analysis from {cached_json_path.name}[/dim]")
+                            console.print(
+                                f"  [dim]Using cached analysis from {cached_json_path.name}[/dim]"
+                            )
                     except Exception:
                         analyses = None
-                
+
                 if analyses is None:
                     analyses = analyze_tracks(matched, setup_cfg)
                     # Save analysis JSON in subdir
@@ -274,7 +394,7 @@ def mix(
                         )
 
                 plan = generate_mix_plan(analyses, setup_cfg)
-                
+
                 # If no explicit output_dir was provided, store bulk outputs directly in out_dir (RECORDS/SOURCE)
                 if not (out_path_norm and str(output_dir).strip()):
                     track_out_dir = out_dir
@@ -282,7 +402,7 @@ def mix(
                     track_out_dir = out_dir / track_name
 
                 output_files = render_mix(matched, plan, track_out_dir, base_name=track_name)
-                
+
                 # Save mix plan as JSON alongside output files
                 plan_json_path = track_out_dir / f"{track_name}_mix_plan.json"
                 plan_json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -348,21 +468,22 @@ def mix(
 
     # 1. Analysis
     console.print(f"\n[bold]1. Analyzing {len(matched)} tracks...[/bold]")
-    
+
     # Check if cached analysis exists (in input directory alongside FLAC files)
     analysis_json_path = in_dir / f"{setup}_analysis.json"
     analyses = None
-    
+
     if analysis_json_path.exists():
         try:
             with open(analysis_json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 from pe_flac_mixer.mix.analyzer import TrackAnalysis
+
                 analyses = {k: TrackAnalysis.from_dict(v) for k, v in data.items()}
                 console.print(f"  [dim]Using cached analysis from {analysis_json_path.name}[/dim]")
         except Exception:
             analyses = None
-    
+
     if analyses is None:
         analyses = analyze_tracks(matched, setup_cfg)
         # Save analysis as JSON alongside FLAC files
@@ -406,7 +527,7 @@ def mix(
     # 3. DSP & Rendering
     console.print("\n[bold]3. Rendering mix & applying master limiter...[/bold]")
     output_files = render_mix(matched, plan, out_dir, base_name=base_name)
-    
+
     # Save mix plan as JSON alongside output files
     plan_json_path = out_dir / f"{base_name}_mix_plan.json"
     plan_json_path.parent.mkdir(parents=True, exist_ok=True)

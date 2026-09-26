@@ -95,7 +95,7 @@ If `group_levels` is not specified in the setup, the default values from the cod
 
 ## Installation
 
-Ensure [uv](https://github.com/astral-sh/uv) is installed:
+Ensure [uv](https://github.com/astral-sh/uv) and [FFmpeg](https://ffmpeg.org/) are installed:
 
 ```bash
 uv sync

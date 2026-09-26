@@ -9,6 +9,7 @@ import pyloudnorm as pyln
 import soundfile as sf
 
 from pe_flac_mixer.mix.dsp import (
+    SimpleReverb,
     apply_gain,
     apply_highpass,
     compressor,
@@ -16,7 +17,6 @@ from pe_flac_mixer.mix.dsp import (
     pan_mono_to_stereo,
     pan_stereo,
     peak_limiter,
-    SimpleReverb,
 )
 from pe_flac_mixer.mix.planner import MixPlan
 
@@ -81,7 +81,7 @@ def render_mix(
             frames_processed = 0
             while frames_processed < max_frames:
                 current_block_len = min(block_size, max_frames - frames_processed)
-                
+
                 # Subgruppen-Puffer
                 drums_block = np.zeros((current_block_len, 2), dtype=np.float32)
                 vocals_block = np.zeros((current_block_len, 2), dtype=np.float32)
@@ -118,7 +118,7 @@ def render_mix(
 
                     # Routen zu Subgruppe basierend auf Track-Gruppe
                     track_group = params.group.lower() if params.group else ""
-                    
+
                     if "drum" in track_group:
                         drums_block[:block_len] += stereo_block
                     elif "vocal" in track_group:

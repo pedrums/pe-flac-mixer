@@ -4,7 +4,7 @@ SOURCE ?= Probe_2026-09-15
 
 .DEFAULT_GOAL := help
 
-.PHONY: help install dev mix analyze create-setup test lint format check clean
+.PHONY: help install dev mix bulk cut analyze create-setup test lint format check clean doc doc-serve build
 
 help: # Show available targets and descriptions
 	@awk 'BEGIN {FS = ":.*?# "} /^[a-zA-Z_-]+:.*?# / {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -15,11 +15,14 @@ install: # Install dependencies using uv
 dev: # Install development dependencies
 	uv sync --dev
 
-mix: # Render rough mix (args: INPUT=<path> [SETUP=<name>])
-	uv run pe-flac-mixer mix "$(INPUT)" --setup "$(SETUP)"
+mix: # Render rough mix (args: INPUT=<path> [SETUP=<name>] [CUT=<seconds>])
+	uv run pe-flac-mixer mix "$(INPUT)" --setup "$(SETUP)" $(if $(CUT),--cut "$(CUT)",)
 
-bulk: # Render bulk mix for all subdirectories (args: RECORDS=<path> or RECORD=<path>, SOURCE=<name> [SETUP=<name>] [OUTPUT=<path>])
-	uv run pe-flac-mixer mix "$(or $(RECORDS),$(RECORD))/$(SOURCE)" --bulk --setup "$(SETUP)" $(if $(OUTPUT),--output "$(OUTPUT)",)
+bulk: # Render bulk mix for all subdirectories (args: RECORDS=<path> or RECORD=<path>, SOURCE=<name> [SETUP=<name>] [OUTPUT=<path>] [CUT=<seconds>])
+	uv run pe-flac-mixer mix "$(or $(RECORDS),$(RECORD))/$(SOURCE)" --bulk --setup "$(SETUP)" $(if $(OUTPUT),--output "$(OUTPUT)",) $(if $(CUT),--cut "$(CUT)",)
+
+cut: # Cut X seconds from the beginning of an MP3 file (args: INPUT=<path> SEC=<seconds>)
+	uv run pe-flac-mixer cut "$(INPUT)" --sec $(SEC)
 
 analyze: # Analyze audio tracks (args: INPUT=<path> [SETUP=<name>])
 	uv run pe-flac-mixer analyze "$(INPUT)" --setup "$(SETUP)"
@@ -49,3 +52,6 @@ doc: # Build documentation with mkdocs
 
 doc-serve: # Serve documentation locally with mkdocs
 	uv run mkdocs serve
+
+build: # Build python package distributions (wheel & sdist) using hatchling / uv
+	uv build

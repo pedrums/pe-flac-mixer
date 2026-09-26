@@ -118,7 +118,7 @@ def compressor(
 ) -> np.ndarray:
     """
     Dynamischer Kompressor mit Soft-Knee.
-    
+
     audio: (N,) oder (N, 2) Audio-Signal
     threshold_db: Schwelle ab der komprimiert wird (z.B. -20 dB)
     ratio: Kompressionsverhältnis (z.B. 4:1 = ratio=4)
@@ -127,32 +127,31 @@ def compressor(
     makeup_gain_db: Ausgleichs-Gain nach Kompression
     sr: Sample Rate
     """
-    threshold_lin = float(10.0 ** (threshold_db / 20.0))
     makeup_gain = float(10.0 ** (makeup_gain_db / 20.0))
     knee_db = 2.0  # Soft-Knee Breite in dB
-    
+
     # Peak-Erkennung pro Sample (Max beider Kanäle falls Stereo)
     if audio.ndim == 1:
         peaks = np.abs(audio)
     else:
         peaks = np.max(np.abs(audio), axis=1)
-    
+
     # Berechne Gain-Reduktion
     peaks_db = 20.0 * np.log10(np.maximum(peaks, 1e-8))
     gain_reduction_db = np.zeros_like(peaks_db)
-    
+
     for i, peak_db in enumerate(peaks_db):
         excess = soft_knee(peak_db, threshold_db, knee_db)
         if excess > 1e-6:
             gain_reduction_db[i] = -excess * (1.0 - 1.0 / ratio)
-    
+
     # Glätte Gain-Reduktion (Attack/Release Envelope)
     alpha_attack = math.exp(-1.0 / (sr * (attack_ms / 1000.0)))
     alpha_release = math.exp(-1.0 / (sr * (release_ms / 1000.0)))
-    
+
     smoothed_gain_db = np.empty_like(gain_reduction_db)
     current_gain_db = 0.0
-    
+
     for i in range(len(gain_reduction_db)):
         target = gain_reduction_db[i]
         if target < current_gain_db:
@@ -162,11 +161,11 @@ def compressor(
             # Release
             current_gain_db = alpha_release * current_gain_db + (1.0 - alpha_release) * target
         smoothed_gain_db[i] = current_gain_db
-    
+
     # Konvertiere zu linear und wende an
     gain_linear = 10.0 ** (smoothed_gain_db / 20.0)
     gain_linear *= makeup_gain
-    
+
     if audio.ndim == 1:
         return audio * gain_linear.astype(np.float32)
     else:
@@ -178,7 +177,7 @@ class SimpleReverb:
     Einfacher Reverb-Effekt basierend auf verzögerten Kopien (frühe Reflektionen).
     Minimal CPU-Overhead für Echtzeit-Verarbeitung.
     """
-    
+
     def __init__(
         self,
         sr: int = 44100,
@@ -193,29 +192,29 @@ class SimpleReverb:
         self.sr = sr
         self.room_size = float(room_size)
         self.decay_time_sec = float(decay_time_sec)
-        
+
         # Frühe Reflektionen: 4 verzögerte Kopien mit unterschiedlichen Zeiten
         # Kurze Verzögerungen (5-50ms) für natürlichen Raumklang
         delay_times_ms = [
-            5 + room_size * 15,   # 5-20ms
+            5 + room_size * 15,  # 5-20ms
             15 + room_size * 20,  # 15-35ms
             30 + room_size * 20,  # 30-50ms
             50 + room_size * 10,  # 50-60ms
         ]
-        
+
         # Konvertiere zu Samples
         self.delays = [int(sr * ms / 1000.0) for ms in delay_times_ms]
         self.buffers = [np.zeros(d, dtype=np.float32) for d in self.delays]
         self.indices = [0] * len(self.delays)
-        
+
         # Damping für Hochfrequenz-Rolloff
         self.damping = 0.5
         self.filter_state = [0.0] * len(self.delays)
-    
+
     def process(self, audio: np.ndarray) -> np.ndarray:
         """
         Verarbeitet Audio mit einfachem Hall-Effekt.
-        
+
         audio: (N,) oder (N, 2) Signal
         Returns: (N, 2) Stereo-Ausgang
         """
@@ -225,44 +224,44 @@ class SimpleReverb:
         else:
             # Mix stereo zu mono für Hall
             mono = 0.5 * (audio[:, 0] + audio[:, 1])
-        
+
         # Verzögerungs-Netzwerk mit Damping
         out_l = np.zeros_like(mono)
         out_r = np.zeros_like(mono)
-        
+
         for i, delay_samples in enumerate(self.delays):
             buffer = self.buffers[i]
             idx = self.indices[i]
             out_channel = np.zeros_like(mono)
             filter_state = self.filter_state[i]
-            
+
             for j, sample in enumerate(mono):
                 delayed = buffer[idx]
-                
+
                 # Einfaches Tiefpass-Filter für Damping
                 filter_state = delayed * (1.0 - self.damping) + filter_state * self.damping
-                
+
                 # Schreibe mit exponentieller Abklingkurve
                 decay_factor = math.exp(-1.0 / (self.sr * self.decay_time_sec))
                 buffer[idx] = sample + filter_state * decay_factor * self.room_size
-                
+
                 out_channel[j] = delayed
                 idx = (idx + 1) % delay_samples
-            
+
             self.indices[i] = idx
             self.filter_state[i] = filter_state
-            
+
             # Abwechselnd links/rechts für Stereo-Verbreiterung
             if i % 2 == 0:
                 out_l += out_channel * (0.25 + 0.15 * self.room_size)
             else:
                 out_r += out_channel * (0.25 + 0.15 * self.room_size)
-        
+
         # Stereo-Ausgang
         stereo_out = np.empty((len(mono), 2), dtype=np.float32)
         stereo_out[:, 0] = out_l
         stereo_out[:, 1] = out_r
-        
+
         return stereo_out
 
 

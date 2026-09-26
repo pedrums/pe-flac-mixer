@@ -9,12 +9,12 @@ from pe_flac_mixer.analysis.analyzer import analyze_tracks
 from pe_flac_mixer.config import load_setup, validate_and_match_tracks
 from pe_flac_mixer.generator import generate_setup_from_directory, save_setup_file
 from pe_flac_mixer.mix.dsp import (
+    SimpleReverb,
     apply_highpass,
     compressor,
     create_highpass_sos,
     pan_mono_to_stereo,
     peak_limiter,
-    SimpleReverb,
 )
 from pe_flac_mixer.mix.planner import generate_mix_plan
 from pe_flac_mixer.mix.renderer import render_mix
@@ -175,9 +175,10 @@ def test_bulk_mixing_mode(tmp_path: Path):
     result = runner.invoke(app, ["mix", str(bulk_root), "--bulk", "--output", str(out_dir)])
 
     assert result.exit_code == 0
-    assert (out_dir / "Song_01" / "Song_01.flac" or out_dir / "Song_01" / "Song_01.mp3").exists() or True
+    assert (
+        out_dir / "Song_01" / "Song_01.flac" or out_dir / "Song_01" / "Song_01.mp3"
+    ).exists() or True
     assert (out_dir / "Song_02").is_dir()
-
 
 
 def test_full_pipeline_end_to_end(tmp_path: Path):
@@ -290,6 +291,37 @@ def test_create_setup_generator(tmp_path: Path):
     reloaded = load_setup(str(yaml_file))
     assert reloaded.name == "test_band"
     assert len(reloaded.channels) == 11
+
+
+def test_cut_command(tmp_path: Path):
+    """Test the cut command / helper for MP3 files."""
+    sr = 44100
+    dur = 5.0
+    t = np.linspace(0, dur, int(sr * dur), endpoint=False)
+    audio = np.column_stack([np.sin(2 * np.pi * 440 * t), np.cos(2 * np.pi * 440 * t)]).astype(
+        np.float32
+    )
+
+    mp3_file = tmp_path / "song.mp3"
+    sf.write(str(mp3_file), audio, sr)
+
+    out_file = tmp_path / "cut_song.mp3"
+
+    from typer.testing import CliRunner
+
+    from pe_flac_mixer.cli import app
+
+    runner = CliRunner()
+    result = runner.invoke(app, ["cut", str(mp3_file), "--sec", "2.0", "--output", str(out_file)])
+
+    assert result.exit_code == 0
+    assert out_file.exists()
+
+    cut_audio, cut_sr = sf.read(str(out_file))
+    assert cut_sr == sr
+    # Expected length: 5.0 - 2.0 = 3.0 seconds
+    expected_samples = int(3.0 * sr)
+    assert abs(len(cut_audio) - expected_samples) < 1000  # allow small codec framing variance
 
 
 def test_local_setup_override(tmp_path: Path):
